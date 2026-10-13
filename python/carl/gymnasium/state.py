@@ -484,10 +484,10 @@ class CarlState:
 
 @dataclass(frozen=True)
 class CarlEvents:
-    score_delta: th.Tensor  # [n_sim]
-    done:        th.Tensor  # [n_sim]
-    terminated:  th.Tensor  # [n_sim]
-    truncated:   th.Tensor  # [n_sim]
+    score_delta: th.Tensor
+    done:        th.Tensor
+    terminated:  th.Tensor
+    truncated:   th.Tensor
 
 
 @dataclass(frozen=True)

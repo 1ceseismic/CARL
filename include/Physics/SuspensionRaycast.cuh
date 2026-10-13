@@ -10,8 +10,9 @@ constexpr float RAY_PARALLEL_EPS = 1e-8f;
 
 struct RayHit
 {
-    float dist;
-    Vec3 normal;
+    float   dist;
+    Vec3    normal;
+    uint8_t source;
 };
 
 // --- Ray-shape intersection primitives ---
@@ -123,6 +124,7 @@ CARL_D CARL_FI void testTriangleWheels(
         if (hitDist <= 0.f || hitDist >= best[w].dist) continue;
 
         best[w].dist = hitDist;
+        best[w].source = WHEEL_SOURCE_ARENA;
 
         Vec3 faceN = edge1.cross(edge2);
         const float nl = faceN.lenSq();
@@ -153,7 +155,7 @@ CARL_D CARL_FI void testOBBWheels(
             CAR_HALF_EX, suspRayLength(w), dist, normal);
         if (!hit || dist >= best[w].dist) continue;
 
-        best[w] = { dist, normal };
+        best[w] = { dist, normal, WHEEL_SOURCE_CAR };
     }
 }
 
@@ -177,7 +179,7 @@ CARL_D CARL_FI void testSphereWheels(
         if (!hit || dist >= best[w].dist) continue;
 
         const Vec3 hitDir = rayStart + rayDir * dist - center;
-        best[w] = { dist, hitDir * invRadius };
+        best[w] = { dist, hitDir * invRadius, WHEEL_SOURCE_BALL };
     }
 }
 
@@ -190,12 +192,13 @@ CARL_D CARL_FI void initWheelHits(
     #pragma unroll
     for (int w = 0; w < NUM_WHEELS; w++)
     {
-        best[w] = { suspRayLength(w) + 1.f, carUp };
+        best[w] = { suspRayLength(w) + 1.f, carUp, WHEEL_SOURCE_NONE };
     }
 }
 
 CARL_D CARL_FI void storeWheelHits(
     CarSuspension& susp,
+    GameState* __restrict__ state,
     int carIdx,
     const RayHit best[NUM_WHEELS])
 {
@@ -206,6 +209,7 @@ CARL_D CARL_FI void storeWheelHits(
     {
         susp.rayDist[wheelBase + w] = best[w].dist;
         susp.rayNormal[wheelBase + w] = best[w].normal;
+        state->cars.wheelSource[wheelBase + w] = best[w].source;
     }
 }
 
@@ -291,5 +295,5 @@ CARL_D CARL_FI void raycastCarSuspension(
     testCarWheels(state, pose, rayDir, carIdx, simIdx, best);
     testBallWheels(state, pose, rayDir, simIdx, best);
 
-    storeWheelHits(space->susp, carIdx, best);
+    storeWheelHits(space->susp, state, carIdx, best);
 }

@@ -26,10 +26,10 @@ class CARLActionCodec(nn.Module):
             device=observation.device,
         )
         
-        mask[..., carl.ACTION_PITCH_LOGITS] = ~on_ground[..., None]
+        # mask[..., carl.ACTION_PITCH_LOGITS] = ~on_ground[..., None]
         mask[..., carl.ACTION_POWERSLIDE_LOGIT] = on_ground
         mask[..., carl.ACTION_BOOST_LOGIT] = has_boost
-        mask[..., carl.ACTION_AIR_ROLL_LOGITS] = ~on_ground[..., None]
+        # mask[..., carl.ACTION_AIR_ROLL_LOGITS] = ~on_ground[..., None]
         mask[..., carl.ACTION_JUMP_LOGIT] = jump_available
 
         return mask

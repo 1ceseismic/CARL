@@ -110,6 +110,8 @@ struct CarState
     DeviceArray<float> carContactCooldown;  // Ticks since last bump
     DeviceArray<int>   ballHitTick;         // Last extra impulse tick
     DeviceArray<int>   ballContactTick;     // Last live contact tick
+    DeviceArray<int>   wheelSource;         // Source of last wheel hit
+    DeviceArray<int>   arenaContactTick;    // Last arena contact tick
 
     DeviceArray<CarControls>      controls;
     DeviceArray<CarInternalState> internal;
@@ -148,6 +150,8 @@ struct CarState
         carContactCooldown.fill(0);
         ballHitTick.fill(0xFF);
         ballContactTick.fill(0xFF);
+        wheelSource.fill(WHEEL_SOURCE_NONE);
+        arenaContactTick.fill(0xFF);
 
         std::vector<CarInternalState> hInternal(internal.count);
         for (int i = 0; i < internal.count; i++)
@@ -180,6 +184,8 @@ struct GameState
     DeviceArray<float> boostPadCooldowns;
     DeviceArray<GoalState> goals;
 
+    DeviceArray<int> ballArenaContactTick;
+
     GameState(const int nSim, const int nBlue,
               const int nOrange, const int seed)
         : nSim(nSim)
@@ -206,5 +212,6 @@ struct GameState
         cars.reset();
         boostPadCooldowns.fill(0);
         goals.fill(0);
+        ballArenaContactTick.fill(0xFF);
     }
 };
