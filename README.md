@@ -38,37 +38,41 @@ observation, reward, terminated, truncated, info = env.step(actions)
 
 Actors use simulation order, then car order. Blue cars come before orange cars. `reset()` returns only the observation tensor. `step()` returns the Gymnasium five-value result.
 
-`info["reward"]` and `info["length"]` contain Python lists for completed actors. Lengths count physics ticks. Same-step autoreset also exposes the pre-reset observation as `info["final_obs"]`, masked by `info["_final_obs"]`.
-
 ## Actions
 
-The Torch action shape is `[n_envs, 7]`. The native action shape is `[n_sim, n_cars, 7]`.
+Actions have shape `[n_envs, 7]` in Torch (`[n_sim, n_cars, 7]` natively) and are held for every tick in `frameskip`.
 
-```text
-[horizontal, vertical, throttle, powerslide, boost, air_roll, jump]
-```
+| # | Field | Values |
+|---|-------|--------|
+| 0 | horizontal | `[-1, 1]` |
+| 1 | vertical | `[-1, 1]` |
+| 2 | throttle | `[-1, 1]` |
+| 3 | powerslide | `0`/`1` (`>= 0.5` active) |
+| 4 | boost | `0`/`1` (`>= 0.5` active) |
+| 5 | air roll | `[-1, 1]` |
+| 6 | jump | `0`/`1` (`>= 0.5` active) |
 
-Horizontal, vertical, throttle, and air roll are continuous values in `[-1, 1]`. Powerslide, boost, and jump use `0` for off and `1` for on; values at least `0.5` are active.
+Pass `discrete_actions=True` for the legacy `MultiDiscrete` space, where analog controls use `0` neutral, `1` negative, `2` positive.
 
-Pass `discrete_actions=True` to retain the legacy `MultiDiscrete` action space. In that mode, analog controls use `0` for neutral, `1` for negative, and `2` for positive.
-
-Controls are held for every tick in `frameskip`. Episode completion is checked after those ticks.
-
-`no_touch_timeout_ticks` optionally truncates an episode after that many 120 Hz physics ticks without any car touching the ball. `no_touch_timeout_seconds` provides the same setting in seconds; specify only one. Both default to disabled. Like `max_ticks`, the condition is packed and reset natively with same-step autoreset.
+`no_touch_timeout_ticks` (or `no_touch_timeout_seconds`, specify only one) truncates an episode after that long without a car touching the ball. Both default to disabled and, like `max_ticks`, are packed and reset natively with same-step autoreset.
 
 ## Observations
 
-The native observation shape is `[n_sim, n_cars, obs_dim]` (all `f32`).
+Observations have shape `[n_sim, n_cars, obs_dim]` (all `f32`). Car blocks are ordered observer first, then teammates, then opponents.
 
-Set `normalize=True` to normalize observations during CUDA packing using arena, ball, car, boost, and angular-speed limits. Reward state and reset setters remain in raw physics units.
+| Block | Fields |
+|-------|--------|
+| Ball | position, velocity, angular velocity |
+| Cars | position, velocity, angular velocity, forward, up, boost, state flags |
+| Boost pads | state, distance to observer |
+| Self-to-ball | relative position, velocity |
+| Self-to-car | relative position, velocity for each other car (same teammate/opponent order) |
+| Goals | ball-to-own-goal and ball-to-opponent-goal, relative to the observing team |
+| Ego | flip/jump availability (0/1), remaining dodge-window seconds |
 
-Each observation contains ball position, velocity, and angular velocity. It then contains position, velocity, angular velocity, forward direction, up direction, boost, and state flags for every car, followed by boost pad state and distance. These existing fields retain their original ordering.
+`normalize=True` normalizes observations during CUDA packing using arena, ball, car, boost, and angular-speed limits; reward state and reset setters remain in raw physics units. `invert_orange=True` rotates orange observations into the blue frame, including the goal vectors.
 
-The appended fields contain self-to-ball relative position and velocity, then self-to-car relative position and velocity for every other car in the same teammate/opponent order, then ball-to-own-goal and ball-to-opponent-goal vectors. Goal identity is relative to the observing team, and orange vectors use the same optional rotation as the base observation. Two final ego fields give `hasFlipOrJump()` (0 or 1) and the remaining dodge-window time in seconds (0 after the flip is spent or the window expires). The categorical jump mask also accounts for the first physics tick before a dodge press is checked.
-
-Car blocks start with the observing car, followed by teammates and opponents. Orange observations can be rotated into the blue frame with `invert_orange=True`.
-
-The native layout and physics constants are available directly from `carl`, including `carl.OBS_BALL`, `carl.OBS_PER_CAR`, `carl.BOOST_PAD_POSITIONS`, `carl.PHYS_DT`, and `carl.REGULATION_TICKS`. The Torch wrapper reads those values from the same C++ definitions as the simulator.
+Layout and physics constants such as `carl.OBS_BALL`, `carl.OBS_PER_CAR`, `carl.BOOST_PAD_POSITIONS`, `carl.PHYS_DT`, and `carl.REGULATION_TICKS` come from the same C++ definitions as the simulator.
 
 ## Custom Rewards
 
