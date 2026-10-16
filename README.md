@@ -36,11 +36,9 @@ actions = torch.zeros((env.n_envs, len(carl.ACTION_NVECS)), dtype=torch.float32,
 observation, reward, terminated, truncated, info = env.step(actions)
 ```
 
-Actors use simulation order, then car order. Blue cars come before orange cars. `reset()` returns only the observation tensor. `step()` returns the Gymnasium five-value result.
-
 ## Actions
 
-Actions have shape `[n_envs, 7]` in Torch (`[n_sim, n_cars, 7]` natively) and are held for every tick in `frameskip`.
+Actions have shape `[n_envs, 7]` in Torch (`[n_sim, n_cars, 7]` natively) and are held for every tick within each `frameskip` window.
 
 | # | Field | Values |
 |---|-------|--------|
@@ -51,10 +49,6 @@ Actions have shape `[n_envs, 7]` in Torch (`[n_sim, n_cars, 7]` natively) and ar
 | 4 | boost | `0`/`1` (`>= 0.5` active) |
 | 5 | air roll | `[-1, 1]` |
 | 6 | jump | `0`/`1` (`>= 0.5` active) |
-
-Pass `discrete_actions=True` for the legacy `MultiDiscrete` space, where analog controls use `0` neutral, `1` negative, `2` positive.
-
-`no_touch_timeout_ticks` (or `no_touch_timeout_seconds`, specify only one) truncates an episode after that long without a car touching the ball. Both default to disabled and, like `max_ticks`, are packed and reset natively with same-step autoreset.
 
 ## Observations
 
@@ -70,13 +64,13 @@ Observations have shape `[n_sim, n_cars, obs_dim]` (all `f32`). Car blocks are o
 | Goals | ball-to-own-goal and ball-to-opponent-goal, relative to the observing team |
 | Ego | flip/jump availability (0/1), remaining dodge-window seconds |
 
-`normalize=True` normalizes observations during CUDA packing using arena, ball, car, boost, and angular-speed limits; reward state and reset setters remain in raw physics units. `invert_orange=True` rotates orange observations into the blue frame, including the goal vectors.
+Observation normalization is built-in and enabled via `normalize=True`.
 
-Layout and physics constants such as `carl.OBS_BALL`, `carl.OBS_PER_CAR`, `carl.BOOST_PAD_POSITIONS`, `carl.PHYS_DT`, and `carl.REGULATION_TICKS` come from the same C++ definitions as the simulator.
+Layout and physics constants such as `carl.OBS_BALL`, `carl.OBS_PER_CAR`, `carl.BOOST_PAD_POSITIONS`, `carl.PHYS_DT`, and `carl.REGULATION_TICKS` are available and help with downstream reward specification and other calculations.
 
 ## Custom Rewards
 
-The environment carries a default, zero-sum reward tied to goals, but rewards are customizable via the exposed `RewardContext`.
+Rewards are customizable via the exposed `RewardContext`.
 
 Reward functions receive a `RewardContext` and return `[n_sim, n_cars]`.
 
