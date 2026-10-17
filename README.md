@@ -17,22 +17,19 @@ uv sync --extra gymnasium
 `CARLTorchVectorEnv` exposes each car as one actor. Cars remain grouped inside each physics simulation.
 
 ```python
-import carl
 import torch
 from carl.gymnasium import CARLTorchVectorEnv
 
-env = CARLTorchVectorEnv(
-    n_sim=1024,
-    n_blue=1,
-    n_orange=1,
-    frameskip=8,
-    max_ticks=4096,
-    no_touch_timeout_seconds=30.0,
-    normalize=True,
-)
+env = CARLTorchVectorEnv(n_sim=8192)
 
 observation = env.reset()
-actions = torch.zeros((env.n_envs, len(carl.ACTION_NVECS)), dtype=torch.float32, device="cuda:0")
+
+actions = torch.zeros(
+    env.action_space.shape,
+    dtype=torch.float32,
+    device=env.device
+)
+
 observation, reward, terminated, truncated, info = env.step(actions)
 ```
 
