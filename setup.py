@@ -14,6 +14,32 @@ def run(cmd, **kwargs):
     subprocess.check_call(cmd, **kwargs)
 
 
+def cuda_architectures():
+    override = os.environ.get("CARL_CUDA_ARCHITECTURES")
+    if override:
+        print(f"[carl] CUDA architectures: {override} (override)")
+        return override
+
+    try:
+        capabilities = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+            text=True,
+        ).splitlines()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return None
+
+    architectures = sorted({
+        capability.strip().replace(".", "")
+        for capability in capabilities
+    })
+    if not architectures or not all(architecture.isdigit() for architecture in architectures):
+        return None
+
+    detected = ";".join(architectures)
+    print(f"[carl] CUDA architectures: {detected} (detected)")
+    return detected
+
+
 class CMakeBuild(build_ext):
     def run(self):
         build_dir = Path(self.build_temp)
@@ -42,7 +68,7 @@ class CMakeBuild(build_ext):
             "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
         ]
 
-        architectures = os.environ.get("CARL_CUDA_ARCHITECTURES")
+        architectures = cuda_architectures()
         if architectures:
             cmake_args.append(f"-DCMAKE_CUDA_ARCHITECTURES={architectures}")
 
