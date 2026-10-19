@@ -129,6 +129,8 @@ struct CarState
         , carContactCooldown(nTotalCars)
         , ballHitTick(nTotalCars)
         , ballContactTick(nTotalCars)
+        , wheelSource(nTotalCars * NUM_WHEELS)
+        , arenaContactTick(nTotalCars)
         , controls(nTotalCars)
         , internal(nTotalCars)
     {
@@ -201,6 +203,7 @@ struct GameState
         , cars(nTotalCars)
         , boostPadCooldowns(nSim * NUM_BOOST_PADS)
         , goals(nSim)
+        , ballArenaContactTick(nSim)
     {}
 
     void reset()
