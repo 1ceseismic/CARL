@@ -4,7 +4,7 @@ CUDA-Accelerated Rocket League (CARL) is a Rocket League physics simulator based
 
 ## Requirements
 
-CARL requires Python 3.10 or newer, Linux, an NVIDIA GPU and driver, and the CUDA Toolkit for source builds.
+CARL requires Python 3.10 or newer, an NVIDIA GPU, and the CUDA Toolkit for source builds.
 
 Install the current source and Torch wrapper with:
 
