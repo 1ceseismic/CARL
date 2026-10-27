@@ -22,12 +22,12 @@ file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
 add_library(carl STATIC ${CORE_SOURCES})
 
 set_target_properties(carl PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED YES
-    CUDA_STANDARD 20
-    CUDA_STANDARD_REQUIRED YES
+    CXX_STANDARD              20
+    CXX_STANDARD_REQUIRED     YES
+    CUDA_STANDARD             20
+    CUDA_STANDARD_REQUIRED    YES
     CUDA_SEPARABLE_COMPILATION ON
-    POSITION_INDEPENDENT_CODE ON
+    POSITION_INDEPENDENT_CODE  ON
 )
 
 target_include_directories(carl PUBLIC
@@ -58,10 +58,10 @@ if(CARL_BUILD_PYTHON)
     pybind11_add_module(carl_module python/carl.cu)
 
     set_target_properties(carl_module PROPERTIES
-        CUDA_STANDARD 20
-        CUDA_STANDARD_REQUIRED YES
+        CUDA_STANDARD             20
+        CUDA_STANDARD_REQUIRED    YES
         CUDA_SEPARABLE_COMPILATION ON
-        OUTPUT_NAME _carl
+        OUTPUT_NAME               _carl
     )
 
     target_link_libraries(carl_module PRIVATE carl)
@@ -82,10 +82,10 @@ if(CARL_BUILD_PARITY_HARNESS)
     add_executable(carl_parity_harness tools/parity_harness.cu)
 
     set_target_properties(carl_parity_harness PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED YES
-        CUDA_STANDARD 20
-        CUDA_STANDARD_REQUIRED YES
+        CXX_STANDARD              20
+        CXX_STANDARD_REQUIRED     YES
+        CUDA_STANDARD             20
+        CUDA_STANDARD_REQUIRED    YES
         CUDA_SEPARABLE_COMPILATION ON
     )
 

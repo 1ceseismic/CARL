@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def check(directory):
-    wheels = list(directory.glob("*.whl"))
+    wheels  = list(directory.glob("*.whl"))
     sources = list(directory.glob("*.tar.gz"))
     assert wheels and sources, "Expected both wheels and a source distribution"
     for wheel in wheels:

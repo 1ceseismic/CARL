@@ -28,7 +28,7 @@ class BuildConfigurationTests(unittest.TestCase):
 
         setup.assert_called_once()
         cls.find_toolkit = staticmethod(namespace["find_cuda_toolkit"])
-        cls.cmake_args = staticmethod(namespace["cuda_cmake_args"])
+        cls.cmake_args   = staticmethod(namespace["cuda_cmake_args"])
 
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -77,7 +77,7 @@ class BuildConfigurationTests(unittest.TestCase):
         self.output.assert_not_called()
 
     def test_invalid_explicit_cuda_home_does_not_fall_back(self):
-        os.environ["CUDA_HOME"] = str(self.root)
+        os.environ["CUDA_HOME"]  = str(self.root)
         self.which.return_value = "/other/cuda/bin/nvcc"
 
         with self.assertRaisesRegex(
@@ -89,7 +89,7 @@ class BuildConfigurationTests(unittest.TestCase):
 
     def test_path_nvcc_resolves_symlink_to_toolkit(self):
         compiler = self.touch("toolkit/bin/nvcc")
-        link = self.root / "nvcc"
+        link     = self.root / "nvcc"
         link.symlink_to(compiler)
         self.which.return_value = str(link)
 
@@ -109,8 +109,8 @@ class BuildConfigurationTests(unittest.TestCase):
                     mock.patch.object(
                         Path,
                         "is_file",
-                        autospec=True,
-                        side_effect=lambda path, available=available: path in available,
+                        autospec    = True,
+                        side_effect = lambda path, available=available: path in available,
                     ),
                     mock.patch.object(
                         Path, "resolve", autospec=True, side_effect=lambda path: path
@@ -142,7 +142,7 @@ class BuildConfigurationTests(unittest.TestCase):
         for target in ("targets/x86_64-linux", "targets/aarch64-linux"):
             for library in ("lib", "lib64"):
                 with self.subTest(target=target, library=library):
-                    header = self.touch(Path(target) / "include/cuda_runtime.h")
+                    header  = self.touch(Path(target) / "include/cuda_runtime.h")
                     archive = self.touch(Path(target) / library / "libcudart_static.a")
                     try:
                         self.assertIn(

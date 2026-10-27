@@ -112,7 +112,7 @@ def cuda_architectures():
 class CMakeBuild(build_ext):
     def run(self):
         toolkit_args = cuda_cmake_args()
-        build_dir = Path(self.build_temp)
+        build_dir    = Path(self.build_temp)
 
         print("[carl] Locating pybind11...")
         pybind_dir = subprocess.check_output(
@@ -160,7 +160,7 @@ class CMakeBuild(build_ext):
             ]
         )
 
-        suffix = sysconfig.get_config_var("EXT_SUFFIX")
+        suffix          = sysconfig.get_config_var("EXT_SUFFIX")
         extension_files = list(build_dir.rglob(f"_carl*{suffix}"))
         if len(extension_files) != 1:
             found = ", ".join(str(path) for path in extension_files) or "none"
@@ -185,8 +185,8 @@ class CMakeBuild(build_ext):
 
 
 setup(
-    packages=find_packages(where="python"),
-    package_dir={"": "python"},
-    ext_modules=[Extension("carl._carl", sources=[])],
-    cmdclass={"build_ext": CMakeBuild},
+    packages    = find_packages(where="python"),
+    package_dir = {"": "python"},
+    ext_modules = [Extension("carl._carl", sources=[])],
+    cmdclass    = {"build_ext": CMakeBuild},
 )
