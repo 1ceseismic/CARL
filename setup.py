@@ -18,7 +18,7 @@ def find_cuda_toolkit():
     for entry in sys.path:
         if not entry:
             continue
-        root = Path(entry) / "nvidia" / "cu13"
+        root = Path(entry) / "nvidia" / "cu12"
         if (root / "bin" / "nvcc").is_file():
             return root
     return None
@@ -27,9 +27,9 @@ def find_cuda_toolkit():
 def cuda_cmake_args():
     root = find_cuda_toolkit()
     if root is None:
-        raise RuntimeError("CARL: CUDA 13.2 toolkit not found")
+        raise RuntimeError("CARL: CUDA 12.8 toolkit not found")
 
-    cudart = root / "lib" / "libcudart.so.13"
+    cudart = root / "lib" / "libcudart.so.12"
     if not cudart.is_file():
         raise RuntimeError(f"CARL: libcudart not found at {cudart}")
 
