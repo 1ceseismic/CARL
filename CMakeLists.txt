@@ -1,14 +1,18 @@
-cmake_minimum_required(VERSION 3.20)
-
-project(CARL LANGUAGES CXX CUDA)
+cmake_minimum_required(VERSION 3.24)
 
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES native)
 endif()
+set(CMAKE_CUDA_RUNTIME_LIBRARY Static)
+project(CARL LANGUAGES CXX CUDA)
 message(STATUS "[carl] CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(CUDAToolkit REQUIRED)
+find_package(CUDAToolkit 12.8 REQUIRED)
+if(NOT CUDAToolkit_VERSION VERSION_LESS 12.9)
+    message(FATAL_ERROR "CARL requires CUDA 12.8, found ${CUDAToolkit_VERSION}")
+endif()
+message(STATUS "[carl] CUDAToolkit: ${CUDAToolkit_VERSION} (${CUDAToolkit_BIN_DIR})")
 
 file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
@@ -18,12 +22,12 @@ file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
 add_library(carl STATIC ${CORE_SOURCES})
 
 set_target_properties(carl PROPERTIES
-    CXX_STANDARD 20
-    CXX_STANDARD_REQUIRED YES
-    CUDA_STANDARD 20
-    CUDA_STANDARD_REQUIRED YES
+    CXX_STANDARD              20
+    CXX_STANDARD_REQUIRED     YES
+    CUDA_STANDARD             20
+    CUDA_STANDARD_REQUIRED    YES
     CUDA_SEPARABLE_COMPILATION ON
-    POSITION_INDEPENDENT_CODE ON
+    POSITION_INDEPENDENT_CODE  ON
 )
 
 target_include_directories(carl PUBLIC
@@ -40,7 +44,6 @@ target_compile_options(carl PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:-w>
     $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-w>
     $<$<COMPILE_LANGUAGE:CUDA>:-Wno-deprecated-gpu-targets>
-    $<$<COMPILE_LANGUAGE:CUDA>:-allow-unsupported-compiler>
 )
 
 # --- Python module ---
@@ -55,10 +58,10 @@ if(CARL_BUILD_PYTHON)
     pybind11_add_module(carl_module python/carl.cu)
 
     set_target_properties(carl_module PROPERTIES
-        CUDA_STANDARD 20
-        CUDA_STANDARD_REQUIRED YES
+        CUDA_STANDARD             20
+        CUDA_STANDARD_REQUIRED    YES
         CUDA_SEPARABLE_COMPILATION ON
-        OUTPUT_NAME _carl
+        OUTPUT_NAME               _carl
     )
 
     target_link_libraries(carl_module PRIVATE carl)
@@ -79,10 +82,10 @@ if(CARL_BUILD_PARITY_HARNESS)
     add_executable(carl_parity_harness tools/parity_harness.cu)
 
     set_target_properties(carl_parity_harness PROPERTIES
-        CXX_STANDARD 20
-        CXX_STANDARD_REQUIRED YES
-        CUDA_STANDARD 20
-        CUDA_STANDARD_REQUIRED YES
+        CXX_STANDARD              20
+        CXX_STANDARD_REQUIRED     YES
+        CUDA_STANDARD             20
+        CUDA_STANDARD_REQUIRED    YES
         CUDA_SEPARABLE_COMPILATION ON
     )
 
@@ -105,6 +108,5 @@ if(CARL_BUILD_PARITY_HARNESS)
         $<$<COMPILE_LANGUAGE:CUDA>:-w>
         $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-w>
         $<$<COMPILE_LANGUAGE:CUDA>:-Wno-deprecated-gpu-targets>
-        $<$<COMPILE_LANGUAGE:CUDA>:-allow-unsupported-compiler>
     )
 endif()

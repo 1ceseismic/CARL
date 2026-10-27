@@ -1,24 +1,24 @@
 [build-system]
 requires = [
-    "setuptools>=64",
+    "setuptools>=77",
     "pybind11>=2.10",
-    "cmake>=3.20",
+    "cmake>=3.24",
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "carl"
-version = "0.1.0"
-description = "CUDA Rocket League simulation"
+name            = "carl"
+version         = "0.1.0"
+description     = "CUDA Rocket League simulation"
 requires-python = ">=3.10"
-license = {text = "MIT"}
-
-[project.optional-dependencies]
-gymnasium = [
+license         = "MIT"
+dependencies = [
     "gymnasium>=1.0",
     "numpy>=1.24",
     "torch>=2.0",
 ]
+
+[project.optional-dependencies]
 jax = [
     "jax[cuda12]>=0.4.30; sys_platform == 'linux'",
 ]

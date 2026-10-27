@@ -1,5 +1,6 @@
 #pragma once
 
+#include "State/Events.cuh"
 #include "State/GameState.cuh"
 #include "State/Workspace.cuh"
 #include "Arena/ArenaMesh.cuh"
@@ -54,7 +55,8 @@ __global__ void carArenaSolveKernel(
 __global__ void carCarBallSolveKernel(
     GameState* __restrict__ state,
     Workspace* __restrict__ space,
-    ArenaMesh* __restrict__ arena);
+    ArenaMesh* __restrict__ arena,
+    BallTouchBuffer touches);
 
 __global__ void integrateCarsKernel(GameState* __restrict__ state);
 

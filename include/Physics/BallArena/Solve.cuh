@@ -5,6 +5,7 @@
 #include "Physics/BallArena/Solver.cuh"
 #include "Physics/CarBall/Solve.cuh"
 #include "Physics/Goals.cuh"
+#include "State/Events.cuh"
 #include "State/GameState.cuh"
 
 CARL_D __noinline__ Vec3 solveBallArena(
@@ -46,7 +47,8 @@ CARL_D __noinline__ Vec3 solveBallArena(
 CARL_D CARL_FI void solveBallForSim(
     GameState* __restrict__ state,
     ArenaMesh* __restrict__ arena,
-    int simIdx)
+    int simIdx,
+    BallTouchBuffer touches = {})
 {
     const int ballIdx = simIdx;
     const Vec3 ballVel = Vec3::ldg(state->ball.vel[ballIdx]);
@@ -69,7 +71,7 @@ CARL_D CARL_FI void solveBallForSim(
             state, arena, ballIdx, preSolveVel, velNoExt);
     }
 
-    solveBallCarForSim(state, simIdx, preSolveVel);
+    solveBallCarForSim(state, simIdx, preSolveVel, touches);
 
     // Integrate position after all collision solves
     Vec3 ballPos = Vec3::ldg(state->ball.pos[ballIdx]);

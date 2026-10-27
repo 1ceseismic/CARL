@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,73 @@ from setuptools.command.build_ext import build_ext
 def run(cmd, **kwargs):
     print(f"[carl] {' '.join(cmd)}")
     subprocess.check_call(cmd, **kwargs)
+
+
+def find_cuda_toolkit():
+    """Locate a system toolkit; explicit CUDA_HOME must not silently fall back."""
+    home = os.environ.get("CUDA_HOME")
+    if home:
+        root = Path(home).expanduser().resolve()
+        if not (root / "bin" / "nvcc").is_file():
+            raise RuntimeError(f"CARL: CUDA_HOME={root} does not contain bin/nvcc")
+        return root
+
+    nvcc = shutil.which("nvcc")
+    if nvcc:
+        return Path(nvcc).resolve().parents[1]
+    for root in (
+        Path("/usr/local/cuda-12.8"),
+        Path("/usr/local/cuda"),
+        Path("/opt/cuda"),
+    ):
+        if (root / "bin" / "nvcc").is_file():
+            return root.resolve()
+    return None
+
+
+def cuda_cmake_args():
+    if sys.platform != "linux":
+        raise RuntimeError("CARL: source builds currently support Linux only")
+    root = find_cuda_toolkit()
+    if root is None:
+        raise RuntimeError(
+            "CARL: source builds require the CUDA 12.8 development toolkit and a "
+            "compatible C++ compiler (for example GCC 12). Install the toolkit, "
+            "set CUDA_HOME to its root or put nvcc on PATH, then rerun uv sync. "
+            "PyTorch's runtime libraries do not provide nvcc. Alternatively, "
+            "install a compatible prebuilt CARL wheel."
+        )
+    nvcc = root / "bin" / "nvcc"
+    try:
+        version = subprocess.check_output([str(nvcc), "--version"], text=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError(f"CARL: could not execute {nvcc}") from exc
+    if not re.search(r"\brelease 12\.8\b", version):
+        raise RuntimeError(f"CARL: CUDA 12.8 is required; {nvcc} reported:\n{version}")
+
+    targets = [
+        root,
+        root / "targets" / "x86_64-linux",
+        root / "targets" / "aarch64-linux",
+    ]
+    if not any((target / "include" / "cuda_runtime.h").is_file() for target in targets):
+        raise RuntimeError(
+            f"CARL: CUDA headers missing under {root}; install the development toolkit"
+        )
+    if not any(
+        (target / lib / "libcudart_static.a").is_file()
+        for target in targets
+        for lib in ("lib64", "lib")
+    ):
+        raise RuntimeError(
+            f"CARL: libcudart_static.a missing under {root}; install the development toolkit"
+        )
+
+    print(f"[carl] CUDA compiler: {nvcc}")
+    return [
+        f"-DCMAKE_CUDA_COMPILER={nvcc}",
+        f"-DCUDAToolkit_ROOT={root}",
+    ]
 
 
 def cuda_architectures():
@@ -28,11 +96,12 @@ def cuda_architectures():
     except (FileNotFoundError, subprocess.CalledProcessError):
         return None
 
-    architectures = sorted({
-        capability.strip().replace(".", "")
-        for capability in capabilities
-    })
-    if not architectures or not all(architecture.isdigit() for architecture in architectures):
+    architectures = sorted(
+        {capability.strip().replace(".", "") for capability in capabilities}
+    )
+    if not architectures or not all(
+        architecture.isdigit() for architecture in architectures
+    ):
         return None
 
     detected = ";".join(architectures)
@@ -42,7 +111,8 @@ def cuda_architectures():
 
 class CMakeBuild(build_ext):
     def run(self):
-        build_dir = Path(self.build_temp)
+        toolkit_args = cuda_cmake_args()
+        build_dir    = Path(self.build_temp)
 
         print("[carl] Locating pybind11...")
         pybind_dir = subprocess.check_output(
@@ -72,6 +142,8 @@ class CMakeBuild(build_ext):
         if architectures:
             cmake_args.append(f"-DCMAKE_CUDA_ARCHITECTURES={architectures}")
 
+        cmake_args.extend(toolkit_args)
+
         run(cmake_args)
 
         print("[carl] Building carl_module...")
@@ -88,7 +160,7 @@ class CMakeBuild(build_ext):
             ]
         )
 
-        suffix = sysconfig.get_config_var("EXT_SUFFIX")
+        suffix          = sysconfig.get_config_var("EXT_SUFFIX")
         extension_files = list(build_dir.rglob(f"_carl*{suffix}"))
         if len(extension_files) != 1:
             found = ", ".join(str(path) for path in extension_files) or "none"
@@ -103,12 +175,18 @@ class CMakeBuild(build_ext):
         asset_dest = dest / "assets"
         asset_dest.mkdir(parents=True, exist_ok=True)
         shutil.copy(Path("assets/arena.obj"), asset_dest / "arena.obj")
+
+        if getattr(self, "editable_mode", False):
+            source_dest = Path("python") / "carl"
+            print(f"[carl] Installing editable extension into {source_dest}")
+            shutil.copy(extension, source_dest / extension.name)
+
         print("[carl] Done")
 
 
 setup(
-    packages=find_packages(where="python"),
-    package_dir={"": "python"},
-    ext_modules=[Extension("carl._carl", sources=[])],
-    cmdclass={"build_ext": CMakeBuild},
+    packages    = find_packages(where="python"),
+    package_dir = {"": "python"},
+    ext_modules = [Extension("carl._carl", sources=[])],
+    cmdclass    = {"build_ext": CMakeBuild},
 )

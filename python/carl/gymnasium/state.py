@@ -5,6 +5,7 @@ from typing import Any
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from carl import BOOST_PAD_POSITIONS, REGULATION_TICKS
+from ..events import BallTouchBatch
 
 
 @dataclass(frozen=True)
@@ -484,10 +485,11 @@ class CarlState:
 
 @dataclass(frozen=True)
 class CarlEvents:
-    score_delta: th.Tensor
-    done:        th.Tensor
-    terminated:  th.Tensor
-    truncated:   th.Tensor
+    score_delta:  th.Tensor
+    done:         th.Tensor
+    terminated:   th.Tensor
+    truncated:    th.Tensor
+    ball_touches: BallTouchBatch | None = None
 
 
 @dataclass(frozen=True)
