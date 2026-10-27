@@ -485,10 +485,10 @@ class CarlState:
 
 @dataclass(frozen=True)
 class CarlEvents:
-    score_delta: th.Tensor
-    done:        th.Tensor
-    terminated:  th.Tensor
-    truncated:   th.Tensor
+    score_delta:  th.Tensor
+    done:         th.Tensor
+    terminated:   th.Tensor
+    truncated:    th.Tensor
     ball_touches: BallTouchBatch | None = None
 
 
