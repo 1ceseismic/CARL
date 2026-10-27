@@ -13,13 +13,13 @@ version = "0.1.0"
 description = "CUDA Rocket League simulation"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-
-[project.optional-dependencies]
-gymnasium = [
+dependencies = [
     "gymnasium>=1.0",
     "numpy>=1.24",
     "torch>=2.0",
 ]
+
+[project.optional-dependencies]
 jax = [
     "jax[cuda12]>=0.4.30; sys_platform == 'linux'",
 ]

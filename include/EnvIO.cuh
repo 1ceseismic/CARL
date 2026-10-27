@@ -2,6 +2,7 @@
 
 #include "Cuda/DLPack.h"
 #include "Cuda/KernelConfig.cuh"
+#include "State/Events.cuh"
 #include "State/GameState.cuh"
 #include "State/Workspace.cuh"
 
@@ -43,6 +44,9 @@ private:
     int*   d_transitionEpisodeTicks = nullptr;
     bool*  d_overtime = nullptr;
     bool*  d_transitionOvertime = nullptr;
+    int*   d_ballTouchCounts = nullptr;
+    int*   d_ballTouchMetadata = nullptr;
+    float* d_ballTouchValues = nullptr;
 
     DiscreteControls* d_actions = nullptr;
     ContinuousControls* d_continuousActions = nullptr;
@@ -52,17 +56,21 @@ private:
     int64_t actShape[3];
     int64_t rewardShape[1];
     int64_t doneShape[1];
+    int64_t ballTouchMetadataShape[3] = {};
+    int64_t ballTouchValuesShape[3] = {};
 
     int  nSim;
     int  nCars;
     int  obsDim;
     int  stateDim;
     int  actDim;
+    int  ballTouchCapacity = 0;
     int  maxTicks = REGULATION_TICKS;
     int  overtimeTimeoutTicks = REGULATION_TICKS;
     int  noTouchTimeoutTicks = 0;
     bool invertOrange;
     bool normalize;
+    bool captureBallTouches = false;
 
     cudaStream_t stream;
     KernelConfig perSimConfig;
@@ -74,7 +82,9 @@ public:
         int nCars,
         cudaStream_t stream,
         bool invertOrange,
-        bool normalize);
+        bool normalize,
+        int frameskip = 1,
+        bool captureBallTouches = false);
     ~EnvIO();
 
     // Pack state into observation buffer
@@ -103,6 +113,17 @@ public:
     DLManagedTensor* getTransitionEpisodeTicksTensor();
     DLManagedTensor* getOvertimeTensor();
     DLManagedTensor* getTransitionOvertimeTensor();
+    DLManagedTensor* getBallTouchCountsTensor();
+    DLManagedTensor* getBallTouchMetadataTensor();
+    DLManagedTensor* getBallTouchValuesTensor();
+
+    void resizeBallTouches(int frameskip);
+    void clearBallTouches();
+    BallTouchBuffer getBallTouchBuffer() const
+    {
+        return { d_ballTouchCounts, d_ballTouchMetadata,
+                 d_ballTouchValues, ballTouchCapacity };
+    }
 
     // Copy external actions into internal buffer
     void setActions(const int32_t* src);

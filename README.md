@@ -10,11 +10,13 @@ On Linux, source builds install the CUDA 13.2 compiler and headers as a build de
 
 ```bash
 # uv project environment
-uv sync --extra gymnasium
+uv sync
 
 # or an existing Python environment
-pip install ".[gymnasium]"
+pip install .
 ```
+
+Gymnasium, NumPy, and Torch are installed as dependencies.
 
 Set `CARL_CUDA_ARCHITECTURES` to override the detected GPU architectures.
 

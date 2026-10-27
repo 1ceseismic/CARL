@@ -57,14 +57,15 @@ name = "carl"
 version = "0.1.0"
 source = { editable = "." }
 
-[package.optional-dependencies]
-gymnasium = [
+dependencies = [
     { name = "gymnasium" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "torch" },
 ]
+
+[package.optional-dependencies]
 jax = [
     { name = "jax", version = "0.6.2", source = { registry = "https://pypi.org/simple" }, extra = ["cuda12"], marker = "python_full_version < '3.11' and sys_platform == 'linux'" },
     { name = "jax", version = "0.10.2", source = { registry = "https://pypi.org/simple" }, extra = ["cuda12"], marker = "python_full_version == '3.11.*' and sys_platform == 'linux'" },
@@ -79,12 +80,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "gymnasium", marker = "extra == 'gymnasium'", specifier = ">=1.0" },
+    { name = "gymnasium", specifier = ">=1.0" },
     { name = "jax", extras = ["cuda12"], marker = "sys_platform == 'linux' and extra == 'jax'", specifier = ">=0.4.30" },
-    { name = "numpy", marker = "extra == 'gymnasium'", specifier = ">=1.24" },
-    { name = "torch", marker = "extra == 'gymnasium'", specifier = ">=2.0" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "torch", specifier = ">=2.0" },
 ]
-provides-extras = ["gymnasium", "jax"]
+provides-extras = ["jax"]
 
 [package.metadata.requires-dev]
 dev = [
