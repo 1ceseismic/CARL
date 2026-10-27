@@ -1,11 +1,10 @@
 import os
 from pathlib import Path
 
-
-os.environ.setdefault(
-    "CARL_ARENA_OBJ",
-    str(Path(__file__).with_name("assets") / "arena.obj"),
-)
+_asset = Path(__file__).with_name("assets") / "arena.obj"
+if not _asset.is_file():
+    _asset = Path(__file__).resolve().parents[2] / "assets" / "arena.obj"
+os.environ.setdefault("CARL_ARENA_OBJ", str(_asset))
 
 from . import _carl
 

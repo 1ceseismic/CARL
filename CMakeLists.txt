@@ -9,6 +9,7 @@ message(STATUS "[carl] CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(CUDAToolkit REQUIRED)
+message(STATUS "[carl] CUDAToolkit: ${CUDAToolkit_VERSION} (${CUDAToolkit_BIN_DIR})")
 
 file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"

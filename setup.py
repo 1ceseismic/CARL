@@ -14,6 +14,68 @@ def run(cmd, **kwargs):
     subprocess.check_call(cmd, **kwargs)
 
 
+def pip_cuda_toolkit():
+    paths = sysconfig.get_paths()
+    site_packages = [
+        Path(paths[key]) for key in ("purelib", "platlib") if paths.get(key)
+    ]
+    for root in dict.fromkeys(site_packages):
+        for name in ("cu13", "cu12"):
+            toolkit = root / "nvidia" / name
+            if (toolkit / "bin" / "nvcc").is_file():
+                return toolkit
+    return None
+
+
+def cuda_library(root, name):
+    for dirname in ("lib64", "lib"):
+        libdir = root / dirname
+        if not libdir.is_dir():
+            continue
+        unversioned = libdir / f"lib{name}.so"
+        if unversioned.is_file():
+            return unversioned
+        versioned = sorted(libdir.glob(f"lib{name}.so.*"))
+        if versioned:
+            return versioned[-1]
+    return None
+
+
+def cuda_cmake_args():
+    override = os.environ.get("CARL_CUDA_TOOLKIT_ROOT") or os.environ.get(
+        "CUDAToolkit_ROOT"
+    )
+    root = Path(override).expanduser().resolve() if override else pip_cuda_toolkit()
+    if root is None:
+        print("[carl] CUDA toolkit: system default")
+        return []
+
+    cudacxx = os.environ.get("CUDACXX")
+    if cudacxx:
+        nvcc = Path(cudacxx).expanduser()
+        if not nvcc.is_absolute():
+            resolved = shutil.which(cudacxx)
+            if resolved:
+                nvcc = Path(resolved)
+    else:
+        nvcc = root / "bin" / "nvcc"
+
+    if not nvcc.is_file():
+        raise RuntimeError(f"CARL: nvcc not found at {nvcc}")
+
+    print(f"[carl] CUDA toolkit: {root}")
+    print(f"[carl] nvcc: {nvcc}")
+
+    args = [
+        f"-DCUDAToolkit_ROOT={root}",
+        f"-DCMAKE_CUDA_COMPILER={nvcc}",
+    ]
+    cudart = cuda_library(root, "cudart")
+    if cudart is not None:
+        args.append(f"-DCUDA_CUDART={cudart}")
+    return args
+
+
 def cuda_architectures():
     override = os.environ.get("CARL_CUDA_ARCHITECTURES")
     if override:
@@ -28,11 +90,12 @@ def cuda_architectures():
     except (FileNotFoundError, subprocess.CalledProcessError):
         return None
 
-    architectures = sorted({
-        capability.strip().replace(".", "")
-        for capability in capabilities
-    })
-    if not architectures or not all(architecture.isdigit() for architecture in architectures):
+    architectures = sorted(
+        {capability.strip().replace(".", "") for capability in capabilities}
+    )
+    if not architectures or not all(
+        architecture.isdigit() for architecture in architectures
+    ):
         return None
 
     detected = ";".join(architectures)
@@ -72,6 +135,8 @@ class CMakeBuild(build_ext):
         if architectures:
             cmake_args.append(f"-DCMAKE_CUDA_ARCHITECTURES={architectures}")
 
+        cmake_args.extend(cuda_cmake_args())
+
         run(cmake_args)
 
         print("[carl] Building carl_module...")
@@ -103,6 +168,12 @@ class CMakeBuild(build_ext):
         asset_dest = dest / "assets"
         asset_dest.mkdir(parents=True, exist_ok=True)
         shutil.copy(Path("assets/arena.obj"), asset_dest / "arena.obj")
+
+        if getattr(self, "editable_mode", False):
+            source_dest = Path("python") / "carl"
+            print(f"[carl] Installing editable extension into {source_dest}")
+            shutil.copy(extension, source_dest / extension.name)
+
         print("[carl] Done")
 
 
