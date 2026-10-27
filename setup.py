@@ -15,65 +15,27 @@ def run(cmd, **kwargs):
 
 
 def pip_cuda_toolkit():
-    paths = sysconfig.get_paths()
-    site_packages = [
-        Path(paths[key]) for key in ("purelib", "platlib") if paths.get(key)
-    ]
-    for root in dict.fromkeys(site_packages):
-        for name in ("cu13", "cu12"):
-            toolkit = root / "nvidia" / name
-            if (toolkit / "bin" / "nvcc").is_file():
-                return toolkit
-    return None
-
-
-def cuda_library(root, name):
-    for dirname in ("lib64", "lib"):
-        libdir = root / dirname
-        if not libdir.is_dir():
-            continue
-        unversioned = libdir / f"lib{name}.so"
-        if unversioned.is_file():
-            return unversioned
-        versioned = sorted(libdir.glob(f"lib{name}.so.*"))
-        if versioned:
-            return versioned[-1]
+    root = Path(sysconfig.get_path("purelib")) / "nvidia" / "cu13"
+    if (root / "bin" / "nvcc").is_file():
+        return root
     return None
 
 
 def cuda_cmake_args():
-    override = os.environ.get("CARL_CUDA_TOOLKIT_ROOT") or os.environ.get(
-        "CUDAToolkit_ROOT"
-    )
-    root = Path(override).expanduser().resolve() if override else pip_cuda_toolkit()
+    root = pip_cuda_toolkit()
     if root is None:
-        print("[carl] CUDA toolkit: system default")
-        return []
+        raise RuntimeError("CARL: CUDA 13.2 toolkit not found")
 
-    cudacxx = os.environ.get("CUDACXX")
-    if cudacxx:
-        nvcc = Path(cudacxx).expanduser()
-        if not nvcc.is_absolute():
-            resolved = shutil.which(cudacxx)
-            if resolved:
-                nvcc = Path(resolved)
-    else:
-        nvcc = root / "bin" / "nvcc"
-
-    if not nvcc.is_file():
-        raise RuntimeError(f"CARL: nvcc not found at {nvcc}")
+    cudart = root / "lib" / "libcudart.so.13"
+    if not cudart.is_file():
+        raise RuntimeError(f"CARL: libcudart not found at {cudart}")
 
     print(f"[carl] CUDA toolkit: {root}")
-    print(f"[carl] nvcc: {nvcc}")
-
-    args = [
+    return [
         f"-DCUDAToolkit_ROOT={root}",
-        f"-DCMAKE_CUDA_COMPILER={nvcc}",
+        f"-DCMAKE_CUDA_COMPILER={root / 'bin' / 'nvcc'}",
+        f"-DCUDA_CUDART={cudart}",
     ]
-    cudart = cuda_library(root, "cudart")
-    if cudart is not None:
-        args.append(f"-DCUDA_CUDART={cudart}")
-    return args
 
 
 def cuda_architectures():

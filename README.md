@@ -12,15 +12,7 @@ On Linux, source builds install the CUDA 13.2 compiler and headers as a build de
 uv sync --extra gymnasium
 ```
 
-To build against a system toolkit instead, set `CUDAToolkit_ROOT` and optionally `CUDACXX`:
-
-```bash
-CUDAToolkit_ROOT=/usr/local/cuda-12.8 \
-CUDACXX=/usr/local/cuda-12.8/bin/nvcc \
-uv sync --extra gymnasium
-```
-
-CUDA 12.8 requires GCC 14 or older; set `CUDAHOSTCXX=/usr/bin/g++-14` if your default compiler is newer. Set `CARL_CUDA_ARCHITECTURES` to override the detected GPU architectures.
+Set `CARL_CUDA_ARCHITECTURES` to override the detected GPU architectures.
 
 ## Torch Environment
 
