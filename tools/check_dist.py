@@ -1,5 +1,3 @@
-"""Check that releases contain the simulator, Python API and arena asset."""
-
 import sys
 import tarfile
 import zipfile
