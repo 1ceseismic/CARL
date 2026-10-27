@@ -9,7 +9,11 @@ CARL requires Python 3.10 or newer, an NVIDIA GPU, and a CUDA 13.2-capable drive
 On Linux, source builds install the CUDA 13.2 compiler and headers as a build dependency, so a system CUDA installation is not required:
 
 ```bash
+# uv project environment
 uv sync --extra gymnasium
+
+# or an existing Python environment
+pip install ".[gymnasium]"
 ```
 
 Set `CARL_CUDA_ARCHITECTURES` to override the detected GPU architectures.

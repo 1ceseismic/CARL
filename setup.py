@@ -14,15 +14,18 @@ def run(cmd, **kwargs):
     subprocess.check_call(cmd, **kwargs)
 
 
-def pip_cuda_toolkit():
-    root = Path(sysconfig.get_path("purelib")) / "nvidia" / "cu13"
-    if (root / "bin" / "nvcc").is_file():
-        return root
+def find_cuda_toolkit():
+    for entry in sys.path:
+        if not entry:
+            continue
+        root = Path(entry) / "nvidia" / "cu13"
+        if (root / "bin" / "nvcc").is_file():
+            return root
     return None
 
 
 def cuda_cmake_args():
-    root = pip_cuda_toolkit()
+    root = find_cuda_toolkit()
     if root is None:
         raise RuntimeError("CARL: CUDA 13.2 toolkit not found")
 
@@ -32,7 +35,6 @@ def cuda_cmake_args():
 
     print(f"[carl] CUDA toolkit: {root}")
     return [
-        f"-DCUDAToolkit_ROOT={root}",
         f"-DCMAKE_CUDA_COMPILER={root / 'bin' / 'nvcc'}",
         f"-DCUDA_CUDART={cudart}",
     ]
