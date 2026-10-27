@@ -1,14 +1,17 @@
-cmake_minimum_required(VERSION 3.20)
-
-project(CARL LANGUAGES CXX CUDA)
+cmake_minimum_required(VERSION 3.24)
 
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES native)
 endif()
+set(CMAKE_CUDA_RUNTIME_LIBRARY Static)
+project(CARL LANGUAGES CXX CUDA)
 message(STATUS "[carl] CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_package(CUDAToolkit REQUIRED)
+find_package(CUDAToolkit 12.8 REQUIRED)
+if(NOT CUDAToolkit_VERSION VERSION_LESS 12.9)
+    message(FATAL_ERROR "CARL requires CUDA 12.8, found ${CUDAToolkit_VERSION}")
+endif()
 message(STATUS "[carl] CUDAToolkit: ${CUDAToolkit_VERSION} (${CUDAToolkit_BIN_DIR})")
 
 file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
@@ -41,7 +44,6 @@ target_compile_options(carl PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:-w>
     $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-w>
     $<$<COMPILE_LANGUAGE:CUDA>:-Wno-deprecated-gpu-targets>
-    $<$<COMPILE_LANGUAGE:CUDA>:-allow-unsupported-compiler>
 )
 
 # --- Python module ---
@@ -106,6 +108,5 @@ if(CARL_BUILD_PARITY_HARNESS)
         $<$<COMPILE_LANGUAGE:CUDA>:-w>
         $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-w>
         $<$<COMPILE_LANGUAGE:CUDA>:-Wno-deprecated-gpu-targets>
-        $<$<COMPILE_LANGUAGE:CUDA>:-allow-unsupported-compiler>
     )
 endif()

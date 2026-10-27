@@ -1,9 +1,8 @@
 [build-system]
 requires = [
-    "setuptools>=64",
+    "setuptools>=77",
     "pybind11>=2.10",
-    "cmake>=3.20",
-    "cuda-toolkit[nvcc,cccl]>=12.8,<12.9; sys_platform == 'linux'",
+    "cmake>=3.24",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -12,7 +11,7 @@ name = "carl"
 version = "0.1.0"
 description = "CUDA Rocket League simulation"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
 dependencies = [
     "gymnasium>=1.0",
     "numpy>=1.24",

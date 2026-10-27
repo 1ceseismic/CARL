@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -15,28 +16,69 @@ def run(cmd, **kwargs):
 
 
 def find_cuda_toolkit():
-    for entry in sys.path:
-        if not entry:
-            continue
-        root = Path(entry) / "nvidia" / "cu12"
+    """Locate a system toolkit; explicit CUDA_HOME must not silently fall back."""
+    home = os.environ.get("CUDA_HOME")
+    if home:
+        root = Path(home).expanduser().resolve()
+        if not (root / "bin" / "nvcc").is_file():
+            raise RuntimeError(f"CARL: CUDA_HOME={root} does not contain bin/nvcc")
+        return root
+
+    nvcc = shutil.which("nvcc")
+    if nvcc:
+        return Path(nvcc).resolve().parents[1]
+    for root in (
+        Path("/usr/local/cuda-12.8"),
+        Path("/usr/local/cuda"),
+        Path("/opt/cuda"),
+    ):
         if (root / "bin" / "nvcc").is_file():
-            return root
+            return root.resolve()
     return None
 
 
 def cuda_cmake_args():
+    if sys.platform != "linux":
+        raise RuntimeError("CARL: source builds currently support Linux only")
     root = find_cuda_toolkit()
     if root is None:
-        raise RuntimeError("CARL: CUDA 12.8 toolkit not found")
+        raise RuntimeError(
+            "CARL: source builds require the CUDA 12.8 development toolkit and a "
+            "compatible C++ compiler (for example GCC 12). Install the toolkit, "
+            "set CUDA_HOME to its root or put nvcc on PATH, then rerun uv sync. "
+            "PyTorch's runtime libraries do not provide nvcc. Alternatively, "
+            "install a compatible prebuilt CARL wheel."
+        )
+    nvcc = root / "bin" / "nvcc"
+    try:
+        version = subprocess.check_output([str(nvcc), "--version"], text=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError(f"CARL: could not execute {nvcc}") from exc
+    if not re.search(r"\brelease 12\.8\b", version):
+        raise RuntimeError(f"CARL: CUDA 12.8 is required; {nvcc} reported:\n{version}")
 
-    cudart = root / "lib" / "libcudart.so.12"
-    if not cudart.is_file():
-        raise RuntimeError(f"CARL: libcudart not found at {cudart}")
+    targets = [
+        root,
+        root / "targets" / "x86_64-linux",
+        root / "targets" / "aarch64-linux",
+    ]
+    if not any((target / "include" / "cuda_runtime.h").is_file() for target in targets):
+        raise RuntimeError(
+            f"CARL: CUDA headers missing under {root}; install the development toolkit"
+        )
+    if not any(
+        (target / lib / "libcudart_static.a").is_file()
+        for target in targets
+        for lib in ("lib64", "lib")
+    ):
+        raise RuntimeError(
+            f"CARL: libcudart_static.a missing under {root}; install the development toolkit"
+        )
 
-    print(f"[carl] CUDA toolkit: {root}")
+    print(f"[carl] CUDA compiler: {nvcc}")
     return [
-        f"-DCMAKE_CUDA_COMPILER={root / 'bin' / 'nvcc'}",
-        f"-DCUDA_CUDART={cudart}",
+        f"-DCMAKE_CUDA_COMPILER={nvcc}",
+        f"-DCUDAToolkit_ROOT={root}",
     ]
 
 
@@ -69,6 +111,7 @@ def cuda_architectures():
 
 class CMakeBuild(build_ext):
     def run(self):
+        toolkit_args = cuda_cmake_args()
         build_dir = Path(self.build_temp)
 
         print("[carl] Locating pybind11...")
@@ -99,7 +142,7 @@ class CMakeBuild(build_ext):
         if architectures:
             cmake_args.append(f"-DCMAKE_CUDA_ARCHITECTURES={architectures}")
 
-        cmake_args.extend(cuda_cmake_args())
+        cmake_args.extend(toolkit_args)
 
         run(cmake_args)
 
