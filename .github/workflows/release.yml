@@ -1,5 +1,10 @@
 name: Build and release
 
+# One-time setup: configure the carl-gpu runner below, a protected pypi
+# environment, and PyPI trusted publishing for this repository and release.yml.
+# Confirm ownership of the PyPI package name before publishing.
+# v<project.version> tags run tests and publish only after they pass.
+# Wheel builds, GPU testing, and publishing still need end-to-end validation.
 on:
   workflow_dispatch:
   push:
@@ -61,7 +66,8 @@ jobs:
           if-no-files-found: error
 
   # Configure a dedicated trusted runner with Python 3.11, uv and an NVIDIA
-  # driver >=570.26. Do not run untrusted pull-request code on this runner.
+  # driver >=570.26 (or newer if required by Torch), but no system CUDA toolkit.
+  # Do not run untrusted pull-request code on this runner.
   gpu-test:
     needs:   build
     runs-on: [self-hosted, linux, x64, carl-gpu]

@@ -8,7 +8,6 @@ recursive-include include *.cuh *.h
 recursive-include src *.cu *.cpp
 recursive-include python *.py *.cu
 include assets/arena.obj
-include docs/releases.md
 include tests/test_gpu.py
 global-exclude *:Zone.Identifier
 global-exclude *.so *.pyc

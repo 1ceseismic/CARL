@@ -17,7 +17,7 @@ uv sync
 
 This builds the local simulation. Toolkit discovery also checks `nvcc` on `PATH` and standard installation locations. Set `CARL_CUDA_ARCHITECTURES` to override detected GPU targets.
 
-Prebuilt wheels are planned, not yet published. See [release and testing instructions](docs/releases.md).
+Prebuilt wheels are planned, not yet published.
 
 ## Torch Environment
 
