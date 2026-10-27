@@ -129,6 +129,7 @@ struct CarState
         , carContactCooldown(nTotalCars)
         , ballHitTick(nTotalCars)
         , ballContactTick(nTotalCars)
+        , wheelSource(nTotalCars * NUM_WHEELS)
         , controls(nTotalCars)
         , internal(nTotalCars)
     {
