@@ -18,23 +18,23 @@ class ResetSamplingTests(unittest.TestCase):
     def indices(self, values):
         return th.tensor(values, device="cuda", dtype=th.int64)
 
-    def test_randomness_is_independent_of_selection_order_and_grouping(self):
-        whole = ResetSampler(6, seed=123)
-        split = ResetSampler(6, seed=123)
-        first = whole.select(self.indices(range(6))).uniform(shape=(4,))
-        second = whole.select(self.indices(range(6))).uniform(shape=(4,))
+    def test_seeded_stream_is_reproducible(self):
+        first = ResetSampler(3, seed=123)
+        second = ResetSampler(3, seed=123)
+        different = ResetSampler(3, seed=124)
 
-        for group in ([4, 1, 0], [5, 2, 3]):
-            indices = self.indices(group)
-            actual = split.select(indices).uniform(shape=(4,))
-            th.testing.assert_close(actual, first[indices], rtol=0, atol=0)
+        def draw(sampler):
+            return sampler.select(self.indices([2, 0])).uniform(shape=(4,))
 
-        for group in ([3, 0], [2, 1, 5, 4]):
-            indices = self.indices(group)
-            actual = split.select(indices).uniform(shape=(4,))
-            th.testing.assert_close(actual, second[indices], rtol=0, atol=0)
+        values = draw(first)
+        repeated = draw(second)
+        other = draw(different)
 
-        self.assertFalse(th.equal(first, second))
+        th.testing.assert_close(values, repeated, rtol=0, atol=0)
+        self.assertFalse(th.equal(values, other))
+        self.assertFalse(th.equal(repeated, draw(second)))
+        self.assertTrue(values.is_cuda)
+        self.assertTrue(((values >= 0) & (values < 1)).all().item())
 
     def test_uniform_choice_and_partial_counters(self):
         sampler = ResetSampler(4, seed=17)

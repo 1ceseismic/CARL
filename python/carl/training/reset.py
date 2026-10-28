@@ -1,5 +1,3 @@
-import math
-
 import torch as th
 
 from carl import _carl
@@ -56,6 +54,8 @@ class ResetSampler:
     def __init__(self, n_sim: int, seed: int = 0, device="cuda:0"):
         self.seed = seed & 0xFFFFFFFF
         self.device = th.device(device)
+        self.generator = th.Generator(device=self.device)
+        self.generator.manual_seed(self.seed)
         self.reset_counts = th.zeros(n_sim, dtype=th.int64, device=self.device)
 
     def select(self, selected: th.Tensor) -> "ResetBatch":
@@ -73,20 +73,24 @@ class ResetSampler:
 
         counts = self.reset_counts[indices].clone()
         self.reset_counts[indices] += 1
-        return ResetBatch(indices, counts, self.seed)
+        return ResetBatch(indices, counts, self.seed, self.generator)
 
 
 class ResetBatch:
 
-    def __init__(self, simulation_indices: th.Tensor, reset_counts=None, seed: int = 0):
+    def __init__(self, simulation_indices: th.Tensor, reset_counts=None, seed: int = 0,
+                 generator=None):
         self.simulation_indices = simulation_indices
         self.device = simulation_indices.device
         self.count = simulation_indices.numel()
         self.seed = seed & 0xFFFFFFFF
+        self.generator = generator
+        if self.generator is None:
+            self.generator = th.Generator(device=self.device)
+            self.generator.manual_seed(self.seed)
         self.reset_counts = (
             th.zeros_like(simulation_indices) if reset_counts is None else reset_counts
         )
-        self._draw = 0
         self._ball = CARLBall.from_tensor(
             th.zeros((self.count, _carl.OBS_BALL), device=self.device, dtype=th.float32)
         )
@@ -99,19 +103,12 @@ class ResetBatch:
         self.ball.on_floor()
 
     def uniform(self, low=0.0, high=1.0, shape=()) -> th.Tensor:
-        width = math.prod(shape)
-        draws = th.arange(self._draw, self._draw + width, device=self.device, dtype=th.int64)
-        self._draw += width
-
-        key = ((self.simulation_indices[:, None] + 1) * 0x9E3779B9) & 0xFFFFFFFF
-        key = key ^ ((self.reset_counts[:, None] * 0x85EBCA6B) & 0xFFFFFFFF)
-        key = key ^ (((draws + 1) * 0xC2B2AE35) & 0xFFFFFFFF) ^ self.seed
-        key = ((key ^ (key >> 16)) * 0x7FEB352D) & 0xFFFFFFFF
-        key = ((key ^ (key >> 15)) * 0x846CA68B) & 0xFFFFFFFF
-        key = key ^ (key >> 16)
-
-        values = (key >> 8).to(th.float32) * (1.0 / (1 << 24))
-        values = values.reshape(self.count, *shape)
+        values = th.rand(
+            (self.count, *shape),
+            generator=self.generator,
+            device=self.device,
+            dtype=th.float32,
+        )
         return low + (high - low) * values
 
     def choice(self, values) -> th.Tensor:
