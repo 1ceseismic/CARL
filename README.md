@@ -12,9 +12,10 @@ CUDA-Accelerated Rocket League (CARL) is a Rocket League physics simulator based
 Prebuilt wheels are not yet published. With CUDA 12.8 and GCC 12 installed, run from the repository root:
 
 ```bash
-export CUDA_HOME=/usr/local/cuda-12.8
 uv sync
 ```
+
+The build uses `CUDA_HOME` when set, as the toolkit installer normally does, and otherwise searches for `nvcc` on `PATH`.
 
 Set `CARL_CUDA_ARCHITECTURES` (for example, `89`) if `nvidia-smi` is unavailable.
 
