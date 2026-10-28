@@ -7,7 +7,9 @@ from pathlib import Path
 def check(directory):
     wheels  = list(directory.glob("*.whl"))
     sources = list(directory.glob("*.tar.gz"))
+    
     assert wheels and sources, "Expected both wheels and a source distribution"
+    
     for wheel in wheels:
         with zipfile.ZipFile(wheel) as archive:
             names = archive.namelist()
@@ -22,6 +24,7 @@ def check(directory):
             ):
                 assert required in names, f"{required} missing from {wheel}"
             assert not any(":Zone.Identifier" in name for name in names)
+            
     for source in sources:
         with tarfile.open(source) as archive:
             names = {name.partition("/")[2] for name in archive.getnames()}
@@ -34,6 +37,7 @@ def check(directory):
                 "assets/arena.obj",
             ):
                 assert required in names, f"{required} missing from {source}"
+                
     print("Distribution contents verified")
 
 
