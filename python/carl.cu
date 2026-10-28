@@ -253,11 +253,9 @@ public:
         int seed,
         int frameskip,
         bool invertOrange,
-        bool normalize,
-        bool captureBallTouches)
+        bool normalize)
         : env(nSim, nBlue, nOrange, seed)
-        , io(nSim, env.getNCars(), env.getStream(), invertOrange, normalize,
-             frameskip, captureBallTouches)
+        , io(nSim, env.getNCars(), env.getStream(), invertOrange, normalize)
         , frameskip(frameskip)
     {
         if (frameskip < 1)
@@ -278,12 +276,10 @@ public:
         py::capsule capsule = toCapsule(actions, env.getStream());
         const DLManagedTensor* actTensor = capsule.get_pointer<DLManagedTensor>();
         io.setActions(actionData(actTensor));
-        io.clearBallTouches();
-        const BallTouchBuffer touches = io.getBallTouchBuffer();
 
         for (int tick = 0; tick < frameskip; tick++)
         {
-            env.step(io.getActions(), touches);
+            env.step(io.getActions());
         }
         
         io.packRewardsDones(env.getDeviceState());
@@ -304,12 +300,10 @@ public:
         py::capsule capsule = toCapsule(actions, env.getStream());
         const DLManagedTensor* actTensor = capsule.get_pointer<DLManagedTensor>();
         io.setContinuousActions(continuousActionData(actTensor));
-        io.clearBallTouches();
-        const BallTouchBuffer touches = io.getBallTouchBuffer();
 
         for (int tick = 0; tick < frameskip; tick++)
         {
-            env.step(io.getContinuousActions(), touches);
+            env.step(io.getContinuousActions());
         }
 
         io.packRewardsDones(env.getDeviceState());
@@ -328,7 +322,6 @@ public:
     void reset()
     {
         env.reset();
-        io.clearBallTouches();
         io.packObs(env.getDeviceState());
         io.packState(env.getDeviceState());
         io.packTransitionState(env.getDeviceState(), 1);
@@ -530,21 +523,6 @@ public:
         return tensorToCapsule(io.getDonesTensor());
     }
 
-    py::object getBallTouchCounts()
-    {
-        return tensorToCapsule(io.getBallTouchCountsTensor());
-    }
-
-    py::object getBallTouchMetadata()
-    {
-        return tensorToCapsule(io.getBallTouchMetadataTensor());
-    }
-
-    py::object getBallTouchValues()
-    {
-        return tensorToCapsule(io.getBallTouchValuesTensor());
-    }
-
     py::object getScoreDifference()
     {
         return tensorToCapsule(io.getScoreDifferenceTensor());
@@ -620,7 +598,6 @@ public:
         {
             throw py::value_error("frameskip must be at least 1");
         }
-        io.resizeBallTouches(ticks);
         frameskip = ticks;
     }
 };
@@ -691,37 +668,6 @@ PYBIND11_MODULE(_carl, m)
     m.attr("OBS_EGO_FLIP_INDEX") = OBS_EGO_FLIP_INDEX;
     m.attr("OBS_EGO_DODGE_TIME_INDEX") = OBS_EGO_DODGE_TIME_INDEX;
 
-    m.attr("EVENT_BALL_TOUCH") = static_cast<int>(EVENT_BALL_TOUCH);
-    m.attr("TOUCH_FRONT") = static_cast<int>(TOUCH_FRONT);
-    m.attr("TOUCH_REAR") = static_cast<int>(TOUCH_REAR);
-    m.attr("TOUCH_LEFT") = static_cast<int>(TOUCH_LEFT);
-    m.attr("TOUCH_RIGHT") = static_cast<int>(TOUCH_RIGHT);
-    m.attr("TOUCH_ROOF") = static_cast<int>(TOUCH_ROOF);
-    m.attr("TOUCH_UNDERSIDE") = static_cast<int>(TOUCH_UNDERSIDE);
-    m.attr("TOUCH_TICK") = static_cast<int>(TOUCH_TICK);
-    m.attr("TOUCH_TYPE") = static_cast<int>(TOUCH_TYPE);
-    m.attr("TOUCH_CAR") = static_cast<int>(TOUCH_CAR);
-    m.attr("TOUCH_SURFACE") = static_cast<int>(TOUCH_SURFACE);
-    m.attr("TOUCH_METADATA_SIZE") = static_cast<int>(TOUCH_METADATA_SIZE);
-    m.attr("TOUCH_POINT_X") = static_cast<int>(TOUCH_POINT_X);
-    m.attr("TOUCH_POINT_Y") = static_cast<int>(TOUCH_POINT_Y);
-    m.attr("TOUCH_POINT_Z") = static_cast<int>(TOUCH_POINT_Z);
-    m.attr("TOUCH_NORMAL_X") = static_cast<int>(TOUCH_NORMAL_X);
-    m.attr("TOUCH_NORMAL_Y") = static_cast<int>(TOUCH_NORMAL_Y);
-    m.attr("TOUCH_NORMAL_Z") = static_cast<int>(TOUCH_NORMAL_Z);
-    m.attr("TOUCH_DEPTH") = static_cast<int>(TOUCH_DEPTH);
-    m.attr("TOUCH_REL_SPEED_BEFORE") = static_cast<int>(TOUCH_REL_SPEED_BEFORE);
-    m.attr("TOUCH_REL_SPEED_AFTER") = static_cast<int>(TOUCH_REL_SPEED_AFTER);
-    m.attr("TOUCH_SPEED_CHANGE") = static_cast<int>(TOUCH_SPEED_CHANGE);
-    m.attr("TOUCH_ABS_SPEED_CHANGE") = static_cast<int>(TOUCH_ABS_SPEED_CHANGE);
-    m.attr("TOUCH_SOLVER_DELTA_X") = static_cast<int>(TOUCH_SOLVER_DELTA_X);
-    m.attr("TOUCH_SOLVER_DELTA_Y") = static_cast<int>(TOUCH_SOLVER_DELTA_Y);
-    m.attr("TOUCH_SOLVER_DELTA_Z") = static_cast<int>(TOUCH_SOLVER_DELTA_Z);
-    m.attr("TOUCH_EXTRA_DELTA_X") = static_cast<int>(TOUCH_EXTRA_DELTA_X);
-    m.attr("TOUCH_EXTRA_DELTA_Y") = static_cast<int>(TOUCH_EXTRA_DELTA_Y);
-    m.attr("TOUCH_EXTRA_DELTA_Z") = static_cast<int>(TOUCH_EXTRA_DELTA_Z);
-    m.attr("TOUCH_VALUE_SIZE") = static_cast<int>(TOUCH_VALUE_SIZE);
-
     m.attr("PHYS_TICKS_PER_SECOND") = PHYS_TICKS_PER_SECOND;
     m.attr("PHYS_DT") = PHYS_DT;
     m.attr("DOUBLEJUMP_MAX_DELAY") = DOUBLEJUMP_MAX_DELAY;
@@ -743,13 +689,12 @@ PYBIND11_MODULE(_carl, m)
     m.attr("BOOST_PAD_POSITIONS") = boostPadPositions;
 
     py::class_<EnvWrapper>(m, "Env")
-        .def(py::init<int, int, int, int, int, bool, bool, bool>(),
+        .def(py::init<int, int, int, int, int, bool, bool>(),
              py::arg("n_sim"), py::arg("n_blue"),
              py::arg("n_orange"), py::arg("seed"),
              py::arg("frameskip") = 1,
              py::arg("invert_orange") = true,
-             py::arg("normalize") = false,
-             py::arg("capture_ball_touches") = false)
+             py::arg("normalize") = false)
 
         .def("step",  &EnvWrapper::step, py::arg("actions"))
         .def("step_continuous", &EnvWrapper::stepContinuous, py::arg("actions"))
@@ -776,9 +721,6 @@ PYBIND11_MODULE(_carl, m)
         .def("get_transition_state", &EnvWrapper::getTransitionState)
         .def("get_rewards",          &EnvWrapper::getRewards)
         .def("get_dones",            &EnvWrapper::getDones)
-        .def("get_ball_touch_counts",   &EnvWrapper::getBallTouchCounts)
-        .def("get_ball_touch_metadata", &EnvWrapper::getBallTouchMetadata)
-        .def("get_ball_touch_values",   &EnvWrapper::getBallTouchValues)
         .def("set_match_state",      &EnvWrapper::setMatchState,
               py::arg("blue_score"), py::arg("orange_score"),
               py::arg("episode_ticks"), py::arg("simulation_indices") = py::none())

@@ -11,7 +11,6 @@ from gymnasium.vector import AutoresetMode, VectorEnv
 from gymnasium.vector.utils import batch_space
 
 import carl
-from ..events import BallTouchBatch, get_ball_touches as read_ball_touches
 from .action import CARLActionCodec
 from .state import (
     BOOST_PAD_POSITIONS,
@@ -98,7 +97,6 @@ class CARLTorchVectorEnv(VectorEnv):
         reward_scale:             float = 1.0,
         reset_state_provider:     ResetStateProvider | None = None,
         discrete_actions:         bool = False,
-        capture_ball_touches:     bool = False,
     ) -> None:
         super().__init__()
         
@@ -115,7 +113,6 @@ class CARLTorchVectorEnv(VectorEnv):
         self.reward_scale = reward_scale
         self.reset_state_provider = reset_state_provider
         self.discrete_actions = discrete_actions
-        self.capture_ball_touches = capture_ball_touches
         self._state: CarlState | None = None
         self._observation: CARLObservation | None = None
 
@@ -127,7 +124,6 @@ class CARLTorchVectorEnv(VectorEnv):
             frameskip=frameskip,
             invert_orange=invert_orange,
             normalize=normalize,
-            capture_ball_touches=capture_ball_touches,
         )
         self._env.max_ticks = max_ticks
         self._env.overtime_timeout_ticks = _ticks(
@@ -306,13 +302,6 @@ class CARLTorchVectorEnv(VectorEnv):
         if self.action_codec is None:
             raise RuntimeError("continuous controls do not use a categorical action mask")
         return self.action_codec.mask(observation)
-
-    def get_ball_touches(self) -> BallTouchBatch:
-        """Return a GPU snapshot of the most recent step's touch events."""
-        self._check_open()
-        if not self.capture_ball_touches:
-            raise RuntimeError("ball-touch capture requires capture_ball_touches=True")
-        return read_ball_touches(self._env)
 
     def _custom_reward(
         self,

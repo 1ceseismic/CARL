@@ -3,7 +3,6 @@
 #include "Cuda/PrefixSum.cuh"
 #include "Cuda/KernelConfig.cuh"
 
-#include "State/Events.cuh"
 #include "State/GameState.cuh"
 #include "State/Workspace.cuh"
 #include "Arena/ArenaMesh.cuh"
@@ -35,7 +34,7 @@ private:
     void stepControls(const ContinuousControls* actions);
     void stepNarrow();
     void stepCarManifoldSolve();
-    void stepCarCarSolve(BallTouchBuffer touches);
+    void stepCarCarSolve();
     void integrateCars();
     void applyImpulseCache();
     void stepBoostPad();
@@ -46,9 +45,8 @@ public:
         const int nOrange, const int seed);
     ~RLEnvironment();
 
-    void step(const DiscreteControls* actions, BallTouchBuffer touches = {});
-    void step(const ContinuousControls* actions, BallTouchBuffer touches = {});
-
+    void step(const DiscreteControls* actions);
+    void step(const ContinuousControls* actions);
     void reset();
     void resetDones(
         int maxTicks, int overtimeTimeoutTicks, int noTouchTimeoutTicks);

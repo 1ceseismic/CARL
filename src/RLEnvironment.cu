@@ -106,10 +106,10 @@ void RLEnvironment::stepCarManifoldSolve()
         carArenaSolveKernel, d_state, d_space, d_arena);
 }
 
-void RLEnvironment::stepCarCarSolve(BallTouchBuffer touches)
+void RLEnvironment::stepCarCarSolve()
 {
     threadPerSimKernelConfig.launch(
-        carCarBallSolveKernel, d_state, d_space, d_arena, touches);
+        carCarBallSolveKernel, d_state, d_space, d_arena);
 }
 
 void RLEnvironment::integrateCars()
@@ -130,28 +130,27 @@ void RLEnvironment::stepBoostPad()
         boostPadKernel, d_state);
 }
 
-void RLEnvironment::step(const DiscreteControls* actions, BallTouchBuffer touches)
+void RLEnvironment::step(const DiscreteControls* actions)
 {
     PROFILE("init step",      beginStep());
     PROFILE("broad+susp",     stepBroadSusp());
     PROFILE("controls",       stepControls(actions));
     PROFILE("narrow",         stepNarrow());
     PROFILE("manifold+solve", stepCarManifoldSolve());
-    PROFILE("car-car+ball",   stepCarCarSolve(touches));
+    PROFILE("car-car+ball",   stepCarCarSolve());
     PROFILE("integrate-cars", integrateCars());
     PROFILE("impulse-cache",  applyImpulseCache());
     PROFILE("boost-pads",     stepBoostPad());
 }
 
-void RLEnvironment::step(
-    const ContinuousControls* actions, BallTouchBuffer touches)
+void RLEnvironment::step(const ContinuousControls* actions)
 {
     PROFILE("init step",      beginStep());
     PROFILE("broad+susp",     stepBroadSusp());
     PROFILE("controls",       stepControls(actions));
     PROFILE("narrow",         stepNarrow());
     PROFILE("manifold+solve", stepCarManifoldSolve());
-    PROFILE("car-car+ball",   stepCarCarSolve(touches));
+    PROFILE("car-car+ball",   stepCarCarSolve());
     PROFILE("integrate-cars", integrateCars());
     PROFILE("impulse-cache",  applyImpulseCache());
     PROFILE("boost-pads",     stepBoostPad());

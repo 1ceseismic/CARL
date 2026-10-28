@@ -27,7 +27,7 @@ Prebuilt wheels are planned, not yet published.
 import torch
 from carl.gymnasium import CARLTorchVectorEnv
 
-env = CARLTorchVectorEnv(n_sim=8192)
+env = CARLTorchVectorEnv(n_sim=8192, n_blue=1, n_orange=1)
 
 observation = env.reset()
 
@@ -47,6 +47,8 @@ Rewards are customizable via the exposed `RewardContext`.
 Reward functions receive a `RewardContext` and return `[n_sim, n_cars]`.
 
 ```python
+import carl
+
 def speed_reward(context):
     return context.current.car_velocity.norm(dim=-1) / carl.CAR_MAX_SPEED
 

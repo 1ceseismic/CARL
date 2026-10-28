@@ -1,10 +1,6 @@
 #include "EnvIO.cuh"
-#include "Physics/CarBall/Contact.cuh"
 #include "Physics/Observations.cuh"
 #include "RLConstants.cuh"
-
-#include <limits>
-#include <stdexcept>
 
 // --- DLPack capsule helpers ---
 
@@ -301,30 +297,6 @@ __global__ void setCarKernel(
     }
 }
 
-__global__ void primeBallContactsKernel(
-    GameState* __restrict__ state,
-    const int64_t* __restrict__ simulationIndices,
-    int nSelected)
-{
-    const int sourceCarIdx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (sourceCarIdx >= nSelected * state->nCars) return;
-
-    const int sourceSimIdx = sourceCarIdx / state->nCars;
-    const int64_t targetSimIdx = simulationIndices
-        ? simulationIndices[sourceSimIdx] : sourceSimIdx;
-    if (targetSimIdx < 0 || targetSimIdx >= state->nSim) return;
-
-    const int carIdx = static_cast<int>(targetSimIdx) * state->nCars
-        + sourceCarIdx % state->nCars;
-    const bool touching = !__ldg(&state->cars.isDemoed[carIdx])
-        && sphereOBBContact(
-            Vec3::ldg(state->ball.pos[targetSimIdx]),
-            Vec3::ldg(state->cars.cen[carIdx]),
-            Quat::ldg(state->cars.rot[carIdx])).hit;
-
-    state->cars.ballContactTick[carIdx] = touching ? state->tickCount : -1;
-}
-
 __global__ void setMatchStateKernel(GameState* state, const int32_t* blue,
     const int32_t* orange, const int32_t* ticks, const int64_t* indices,
     int nSelected)
@@ -368,9 +340,7 @@ EnvIO::EnvIO(
     int nCars,
     cudaStream_t stream,
     bool invertOrange,
-    bool normalize,
-    int frameskip,
-    bool captureBallTouches)
+    bool normalize)
     : nSim(nSim)
     , nCars(nCars)
     , obsDim(observationDim(nCars))
@@ -378,7 +348,6 @@ EnvIO::EnvIO(
     , actDim(nCars * ACT_PER_CAR)
     , invertOrange(invertOrange)
     , normalize(normalize)
-    , captureBallTouches(captureBallTouches)
     , stream(stream)
 {
     obsShape[0] = nSim;
@@ -417,8 +386,6 @@ EnvIO::EnvIO(
         .setBlockDim(128)
         .setGridFromThreads(nSim * nCars)
         .setStream(stream);
-
-    resizeBallTouches(frameskip);
 }
 
 EnvIO::~EnvIO()
@@ -437,52 +404,6 @@ EnvIO::~EnvIO()
     CUDA_CHECK(cudaFree(d_transitionEpisodeTicks));
     CUDA_CHECK(cudaFree(d_overtime));
     CUDA_CHECK(cudaFree(d_transitionOvertime));
-    CUDA_CHECK(cudaFree(d_ballTouchCounts));
-    CUDA_CHECK(cudaFree(d_ballTouchMetadata));
-    CUDA_CHECK(cudaFree(d_ballTouchValues));
-}
-
-void EnvIO::resizeBallTouches(int frameskip)
-{
-    if (!captureBallTouches) return;
-    if (frameskip < 1 || nCars < 1
-        || frameskip > std::numeric_limits<int>::max() / nCars)
-    {
-        throw std::invalid_argument("invalid ball-touch frameskip capacity");
-    }
-
-    const int capacity = frameskip * nCars;
-    if (capacity == ballTouchCapacity) return;
-
-    CUDA_CHECK(cudaStreamSynchronize(stream));
-    CUDA_CHECK(cudaFree(d_ballTouchCounts));
-    CUDA_CHECK(cudaFree(d_ballTouchMetadata));
-    CUDA_CHECK(cudaFree(d_ballTouchValues));
-
-    ballTouchCapacity = capacity;
-    ballTouchMetadataShape[0] = nSim;
-    ballTouchMetadataShape[1] = capacity;
-    ballTouchMetadataShape[2] = TOUCH_METADATA_SIZE;
-    ballTouchValuesShape[0] = nSim;
-    ballTouchValuesShape[1] = capacity;
-    ballTouchValuesShape[2] = TOUCH_VALUE_SIZE;
-
-    const size_t slots = static_cast<size_t>(nSim) * capacity;
-    CUDA_CHECK(cudaMalloc(&d_ballTouchCounts, nSim * sizeof(int)));
-    CUDA_CHECK(cudaMalloc(&d_ballTouchMetadata,
-        slots * TOUCH_METADATA_SIZE * sizeof(int)));
-    CUDA_CHECK(cudaMalloc(&d_ballTouchValues,
-        slots * TOUCH_VALUE_SIZE * sizeof(float)));
-    clearBallTouches();
-}
-
-void EnvIO::clearBallTouches()
-{
-    if (d_ballTouchCounts)
-    {
-        CUDA_CHECK(cudaMemsetAsync(
-            d_ballTouchCounts, 0, nSim * sizeof(int), stream));
-    }
 }
 
 void EnvIO::packState(GameState* d_gameState)
@@ -615,24 +536,6 @@ DLManagedTensor* EnvIO::getTransitionOvertimeTensor()
     return makeBoolTensor(d_transitionOvertime, doneShape, 1);
 }
 
-DLManagedTensor* EnvIO::getBallTouchCountsTensor()
-{
-    if (!captureBallTouches) throw std::runtime_error("ball-touch capture is disabled");
-    return makeIntTensor(d_ballTouchCounts, doneShape, 1);
-}
-
-DLManagedTensor* EnvIO::getBallTouchMetadataTensor()
-{
-    if (!captureBallTouches) throw std::runtime_error("ball-touch capture is disabled");
-    return makeIntTensor(d_ballTouchMetadata, ballTouchMetadataShape, 3);
-}
-
-DLManagedTensor* EnvIO::getBallTouchValuesTensor()
-{
-    if (!captureBallTouches) throw std::runtime_error("ball-touch capture is disabled");
-    return makeFloatTensor(d_ballTouchValues, ballTouchValuesShape, 3);
-}
-
 // Copy external device action tensor into internal buffer (D2D, same stream)
 void EnvIO::setActions(const int32_t* src)
 {
@@ -668,14 +571,6 @@ void EnvIO::setBall(
         d_state, pos, vel, ang, simulationIndices, nSelected, nSim);
 
     CUDA_CHECK(cudaGetLastError());
-
-    if (captureBallTouches)
-    {
-        primeBallContactsKernel<<<perAgentConfig.gridDim,
-            perAgentConfig.blockDim, 0, stream>>>(
-            d_state, simulationIndices, nSelected);
-        CUDA_CHECK(cudaGetLastError());
-    }
 }
 
 void EnvIO::setCar(
@@ -706,14 +601,6 @@ void EnvIO::setCar(
         boost, internalState, simulationIndices, nSelected, nCars, nSim);
         
     CUDA_CHECK(cudaGetLastError());
-
-    if (captureBallTouches)
-    {
-        primeBallContactsKernel<<<perAgentConfig.gridDim,
-            perAgentConfig.blockDim, 0, stream>>>(
-            d_state, simulationIndices, nSelected);
-        CUDA_CHECK(cudaGetLastError());
-    }
 }
 
 void EnvIO::setMatchState(

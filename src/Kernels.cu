@@ -150,14 +150,13 @@ __global__ void carArenaSolveKernel(
 __global__ void carCarBallSolveKernel(
     GameState* __restrict__ state,
     Workspace* __restrict__ space,
-    ArenaMesh* __restrict__ arena,
-    BallTouchBuffer touches)
+    ArenaMesh* __restrict__ arena)
 {
     const int simIdx = blockIdx.x * blockDim.x + threadIdx.x;
     if (simIdx >= state->nSim) return;
 
     solveCarCarForSim(state, space, simIdx);
-    solveBallForSim(state, arena, simIdx, touches);
+    solveBallForSim(state, arena, simIdx);
 }
 
 __global__ void integrateCarsKernel(GameState* __restrict__ state)
