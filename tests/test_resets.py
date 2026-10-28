@@ -111,15 +111,165 @@ class ResetSamplingTests(unittest.TestCase):
         self.assertEqual(state.ball.shape, (0, _carl.OBS_BALL))
         self.assertEqual(state.cars.shape, (0, 1, _carl.OBS_PER_CAR))
 
-    def test_unsupported_surface_is_explicit(self):
-        batch = ResetSampler(1).select(self.indices([0]))
-        initial = InitialState(
-            ego=CarState(OnSurface(surface=ArenaSurface.CEILING)),
-            ball=BallState(position=(0, 0, 100)),
+    def test_ceiling_and_side_wall_placement(self):
+        batch = ResetSampler(2).select(self.indices([0, 1]))
+        ceiling_z = _carl.ARENA_MAX[2] - _carl.CAR_REST_Z
+
+        batch.ego.on_ceiling(position=(100, -200), heading=math.pi / 2)
+        state = batch.build()
+        th.testing.assert_close(
+            state.cars.position,
+            th.tensor([[[100, -200, ceiling_z]]] * 2, device="cuda"),
+        )
+        th.testing.assert_close(
+            state.cars.up,
+            th.tensor([[[0, 0, -1]]] * 2, device="cuda", dtype=th.float32),
+        )
+        th.testing.assert_close(
+            state.cars.forward,
+            th.tensor([[[0, -1, 0]]] * 2, device="cuda", dtype=th.float32),
+            rtol=0, atol=1e-6,
+        )
+        self.assertFalse(state.cars.on_ground.any().item())
+
+        wall_x = _carl.ARENA_MAX[0] - _carl.CAR_REST_Z
+        batch.ego.on_side_wall(position=(300, 500), side=1)
+        state = batch.build()
+        th.testing.assert_close(
+            state.cars.position,
+            th.tensor([[[wall_x, 300, 500]]] * 2, device="cuda"),
+        )
+        th.testing.assert_close(
+            state.cars.up,
+            th.tensor([[[-1, 0, 0]]] * 2, device="cuda", dtype=th.float32),
+        )
+        th.testing.assert_close(
+            state.cars.forward,
+            th.tensor([[[0, 1, 0]]] * 2, device="cuda", dtype=th.float32),
+        )
+        self.assertFalse(state.cars.on_ground.any().item())
+
+        batch.ego.on_side_wall(position=(300, 500), side=-1)
+        state = batch.build()
+        th.testing.assert_close(
+            state.cars.position,
+            th.tensor([[[-wall_x, 300, 500]]] * 2, device="cuda"),
+        )
+        th.testing.assert_close(
+            state.cars.up,
+            th.tensor([[[1, 0, 0]]] * 2, device="cuda", dtype=th.float32),
         )
 
-        with self.assertRaises(NotImplementedError):
-            batch.sample(initial)
+    def test_back_wall_and_ball_surface_placement(self):
+        batch = ResetSampler(2).select(self.indices([0, 1]))
+        wall_y = _carl.ARENA_MAX[1] - _carl.CAR_REST_Z
+
+        batch.ego.on_back_wall(position=(400, 700), side=1)
+        state = batch.build()
+        th.testing.assert_close(
+            state.cars.position,
+            th.tensor([[[400, wall_y, 700]]] * 2, device="cuda"),
+        )
+        th.testing.assert_close(
+            state.cars.up,
+            th.tensor([[[0, -1, 0]]] * 2, device="cuda", dtype=th.float32),
+        )
+        th.testing.assert_close(
+            state.cars.forward,
+            th.tensor([[[1, 0, 0]]] * 2, device="cuda", dtype=th.float32),
+        )
+
+        batch.ego.on_back_wall(position=(400, 700), side=-1)
+        state = batch.build()
+        th.testing.assert_close(
+            state.cars.position,
+            th.tensor([[[400, -wall_y, 700]]] * 2, device="cuda"),
+        )
+        th.testing.assert_close(
+            state.cars.up,
+            th.tensor([[[0, 1, 0]]] * 2, device="cuda", dtype=th.float32),
+        )
+
+        ceiling_z = _carl.ARENA_MAX[2] - _carl.BALL_REST_Z
+        batch.ball.on_ceiling(position=(200, 300))
+        th.testing.assert_close(
+            batch.build().ball.position,
+            th.tensor([[200, 300, ceiling_z]] * 2, device="cuda"),
+        )
+
+        ball_x = _carl.ARENA_MAX[0] - _carl.BALL_REST_Z
+        batch.ball.on_side_wall(position=(400, 600), side=-1)
+        th.testing.assert_close(
+            batch.build().ball.position,
+            th.tensor([[-ball_x, 400, 600]] * 2, device="cuda"),
+        )
+
+        ball_y = _carl.ARENA_MAX[1] - _carl.BALL_REST_Z
+        batch.ball.on_back_wall(position=(400, 600), side=1)
+        th.testing.assert_close(
+            batch.build().ball.position,
+            th.tensor([[400, ball_y, 600]] * 2, device="cuda"),
+        )
+
+    def test_surface_sampling_and_side_validation(self):
+        initial = InitialState(
+            ego = CarState(
+                placement = OnSurface(
+                    surface=ArenaSurface.SIDE_WALL, position=(600, 800),
+                    heading=0.3, side=-1,
+                ),
+                velocity  = (0, 100, 0),
+            ),
+            ball = BallState(position=(0, 0, 300)),
+        )
+        state = ResetSampler(2).select(self.indices([0, 1])).sample(initial)
+        wall_x = -(_carl.ARENA_MAX[0] - _carl.CAR_REST_Z)
+
+        self.assertTrue((state.cars.position[..., 0] == wall_x).all().item())
+        th.testing.assert_close(
+            state.cars.position[:, 0, 1:],
+            th.tensor([[600, 800]] * 2, device="cuda", dtype=th.float32),
+        )
+        self.assertFalse(state.cars.on_ground.any().item())
+        self.assertFalse(state.car_internal_state.any().item())
+
+        with self.assertRaises(ValueError):
+            OnSurface(side=0)
+
+        batch = ResetSampler(1).select(self.indices([0]))
+        with self.assertRaises(ValueError):
+            batch.ego.on_side_wall(side=2)
+        with self.assertRaises(ValueError):
+            batch.ball.on_back_wall(side=0)
+        with self.assertRaises(ValueError):
+            batch.ego.on_surface(ArenaSurface.FLOOR | ArenaSurface.CEILING)
+
+    def test_surface_reset_steps_without_divergence(self):
+        sampler = ResetSampler(2, seed=5)
+        initial = InitialState(
+            ego  = CarState(OnSurface(surface=ArenaSurface.CEILING)),
+            ball = BallState(position=(0, 0, 500)),
+        )
+
+        def provider(mask):
+            return sampler.select(mask).sample(initial)
+
+        env = CARLTorchVectorEnv(
+            n_sim=2, n_blue=1, n_orange=0, frameskip=1,
+            reset_state_provider=provider,
+        )
+        self.addCleanup(env.close)
+        observation = env.reset()
+        self.assertTrue(th.isfinite(observation).all().item())
+
+        actions = th.zeros((2, 7), device="cuda")
+        observation, *_ = env.step(actions)
+        self.assertTrue(th.isfinite(observation).all().item())
+        th.testing.assert_close(
+            observation.car_position[..., 2],
+            th.full((2, 1), _carl.ARENA_MAX[2] - _carl.CAR_REST_Z, device="cuda"),
+            rtol=0, atol=100,
+        )
 
     def test_provider_round_trip_and_neutral_partial_reset(self):
         sampler = ResetSampler(2, seed=19)

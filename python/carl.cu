@@ -759,6 +759,8 @@ PYBIND11_MODULE(_carl, m)
     m.attr("CAR_MAX_ANG_SPEED") = CAR_MAX_ANG_SPEED;
     m.attr("CAR_REST_Z") = CAR_REST_Z;
     m.attr("BALL_REST_Z") = BALL_REST_Z;
+    m.attr("ARENA_MIN") = py::make_tuple(ARENA_MIN.x, ARENA_MIN.y, ARENA_MIN.z);
+    m.attr("ARENA_MAX") = py::make_tuple(ARENA_MAX.x, ARENA_MAX.y, ARENA_MAX.z);
     m.attr("CAR_INTERNAL_SIZE") = static_cast<int>(CAR_INTERNAL_SIZE);
     m.attr("CAR_INT_ON_GROUND") = static_cast<int>(CAR_INT_ON_GROUND);
     m.attr("BOOST_MAX") = BOOST_MAX;

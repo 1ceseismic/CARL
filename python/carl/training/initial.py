@@ -50,6 +50,11 @@ class OnSurface:
     surface:  ArenaSurface = ArenaSurface.FLOOR
     position: Vector2      = (0.0, 0.0)
     heading:  Scalar       = 0.0
+    side:     int          = 1
+
+    def __post_init__(self):
+        if self.side not in (-1, 1):
+            raise ValueError("side must be -1 or 1")
 
 
 @dataclass

@@ -9,6 +9,48 @@ from .initial import Box2D, Box3D, Euler, InAir, InitialState, OnSurface, Unifor
 from ..events import ArenaSurface
 
 
+def _check_side(side):
+    if side not in (-1, 1):
+        raise ValueError("side must be -1 or 1")
+
+
+def _surface_axes(surface, side):
+    if surface == ArenaSurface.FLOOR:
+        return (0.0, 0.0, 1.0), (1.0, 0.0, 0.0)
+    if surface == ArenaSurface.CEILING:
+        return (0.0, 0.0, -1.0), (1.0, 0.0, 0.0)
+    if surface == ArenaSurface.SIDE_WALL:
+        return (-float(side), 0.0, 0.0), (0.0, 1.0, 0.0)
+    if surface == ArenaSurface.BACK_WALL:
+        return (0.0, -float(side), 0.0), (1.0, 0.0, 0.0)
+    raise ValueError("unsupported arena surface")
+
+
+def _surface_position(batch, surface, position, side, rest):
+    tangent = batch._vector(position, dimensions=2)
+    if surface == ArenaSurface.FLOOR:
+        depth = tangent.new_full((batch.count, 1), rest)
+        return th.cat((tangent, depth), dim=-1)
+    if surface == ArenaSurface.CEILING:
+        depth = tangent.new_full((batch.count, 1), _carl.ARENA_MAX[2] - rest)
+        return th.cat((tangent, depth), dim=-1)
+    if surface == ArenaSurface.SIDE_WALL:
+        x = tangent.new_full((batch.count, 1), side * (_carl.ARENA_MAX[0] - rest))
+        return th.cat((x, tangent), dim=-1)
+    if surface == ArenaSurface.BACK_WALL:
+        y = tangent.new_full((batch.count, 1), side * (_carl.ARENA_MAX[1] - rest))
+        return th.cat((tangent[:, :1], y, tangent[:, 1:]), dim=-1)
+    raise ValueError("unsupported arena surface")
+
+
+def _surface_forward(batch, normal, tangent, heading):
+    angle = batch._scalar(heading)
+    normal = th.tensor(normal, device=batch.device, dtype=th.float32).expand(batch.count, 3)
+    tangent = th.tensor(tangent, device=batch.device, dtype=th.float32).expand(batch.count, 3)
+    bitangent = th.linalg.cross(normal, tangent, dim=-1)
+    return tangent * angle.cos()[:, None] + bitangent * angle.sin()[:, None]
+
+
 class ResetSampler:
 
     def __init__(self, n_sim: int, seed: int = 0, device="cuda:0"):
@@ -100,9 +142,9 @@ class ResetBatch:
     def sample(self, initial: InitialState) -> CARLResetState:
         placement = initial.ego.placement
         if isinstance(placement, OnSurface):
-            if placement.surface != ArenaSurface.FLOOR:
-                raise NotImplementedError("only floor placement is implemented")
-            self.ego.on_floor(placement.position, placement.heading)
+            self.ego.on_surface(
+                placement.surface, placement.position, placement.heading, placement.side
+            )
         elif isinstance(placement, InAir):
             self.ego.in_air(placement.position, placement.orientation)
         else:
@@ -170,12 +212,30 @@ class CarReset:
             self._car.boost.copy_(batch._scalar(boost))
         return self
 
+    def on_surface(self, surface=ArenaSurface.FLOOR, position=(0, 0),
+                   heading=0.0, side=1, **physics):
+        _check_side(side)
+        normal, tangent = _surface_axes(surface, side)
+        position = _surface_position(self._batch, surface, position, side, _carl.CAR_REST_Z)
+        forward = _surface_forward(self._batch, normal, tangent, heading)
+
+        self._car.position.copy_(position)
+        self._car.forward.copy_(forward)
+        self._car.up.copy_(th.tensor(normal, device=self._batch.device, dtype=th.float32))
+        self._car[..., _carl.OBS_ON_GROUND] = int(surface == ArenaSurface.FLOOR)
+        return self.set(**physics)
+
     def on_floor(self, position=(0, 0), heading=0.0, **physics):
-        xy = self._batch._vector(position, dimensions=2)
-        height = xy.new_full((self._batch.count, 1), _carl.CAR_REST_Z)
-        self.set(position=th.cat((xy, height), dim=-1), orientation=Euler(yaw=heading), **physics)
-        self._car[..., _carl.OBS_ON_GROUND] = 1
-        return self
+        return self.on_surface(ArenaSurface.FLOOR, position, heading, **physics)
+
+    def on_ceiling(self, position=(0, 0), heading=0.0, **physics):
+        return self.on_surface(ArenaSurface.CEILING, position, heading, **physics)
+
+    def on_side_wall(self, position=(0, 0), heading=0.0, side=1, **physics):
+        return self.on_surface(ArenaSurface.SIDE_WALL, position, heading, side, **physics)
+
+    def on_back_wall(self, position=(0, 0), heading=0.0, side=1, **physics):
+        return self.on_surface(ArenaSurface.BACK_WALL, position, heading, side, **physics)
 
     def in_air(self, position, orientation=None, **physics):
         orientation = Euler() if orientation is None else orientation
@@ -211,7 +271,19 @@ class BallReset:
                 getattr(self._ball, name).copy_(self._batch._vector(value))
         return self
 
+    def on_surface(self, surface=ArenaSurface.FLOOR, position=(0, 0), side=1, **physics):
+        _check_side(side)
+        position = _surface_position(self._batch, surface, position, side, _carl.BALL_REST_Z)
+        return self.set(position=position, **physics)
+
     def on_floor(self, position=(0, 0), **physics):
-        xy = self._batch._vector(position, dimensions=2)
-        height = xy.new_full((self._batch.count, 1), _carl.BALL_REST_Z)
-        return self.set(position=th.cat((xy, height), dim=-1), **physics)
+        return self.on_surface(ArenaSurface.FLOOR, position, **physics)
+
+    def on_ceiling(self, position=(0, 0), **physics):
+        return self.on_surface(ArenaSurface.CEILING, position, **physics)
+
+    def on_side_wall(self, position=(0, 0), side=1, **physics):
+        return self.on_surface(ArenaSurface.SIDE_WALL, position, side, **physics)
+
+    def on_back_wall(self, position=(0, 0), side=1, **physics):
+        return self.on_surface(ArenaSurface.BACK_WALL, position, side, **physics)
