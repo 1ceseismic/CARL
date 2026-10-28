@@ -68,7 +68,11 @@ class ResetSamplingTests(unittest.TestCase):
         self.assertTrue(state.cars.on_ground.all().item())
         th.testing.assert_close(state.cars.ego.forward, th.tensor([[0, 1, 0]] * 2, device="cuda", dtype=th.float32))
         th.testing.assert_close(state.ball.position, ball_position)
-        th.testing.assert_close(state.ball.velocity, th.tensor([[0, 400, 0]] * 2, device="cuda", dtype=th.float32))
+        th.testing.assert_close(
+            state.ball.velocity,
+            th.tensor([[0, 400, 0]] * 2, device="cuda", dtype=th.float32),
+            rtol=0, atol=1e-4,
+        )
         self.assertTrue(((state.cars.boost >= 60) & (state.cars.boost < 80)).all().item())
 
     def test_sample_initial_state_in_air(self):
