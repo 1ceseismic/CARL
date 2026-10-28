@@ -143,7 +143,8 @@ CARL_D CARL_FI void tryStartAutoFlip(ControlCtx& ctx)
     const Vec3 normal = Vec3::ldg(ctx.space->ctMan.worldNormal[manIdx]);
     if (normal.z <= CAR_AUTOFLIP_NORMZ_THRESH) return;
 
-    const float roll = atan2f(ctx.up.x, ctx.up.z);
+    const Vec3 right = ctx.rot.toWorld(WORLD_Y);
+    const float roll = -atan2f(right.z, ctx.up.z);
     const float absRoll = fabsf(roll);
     if (absRoll <= CAR_AUTOFLIP_ROLL_THRESH) return;
 
