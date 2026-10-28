@@ -4,26 +4,19 @@ CUDA-Accelerated Rocket League (CARL) is a Rocket League physics simulator based
 
 ## Requirements
 
-- Linux and Python 3.10 or newer.
-- An NVIDIA GPU with a driver that supports the CUDA runtime used by the installed PyTorch build. CUDA 12.8 requires Linux driver 570.26 or newer.
-- For source builds: the **CUDA 12.8 development toolkit** and GCC 12, or another compiler supported by that toolkit.
-
-`uv sync` installs Gymnasium, NumPy, and PyTorch automatically.
+- Linux, Python 3.10+, and an NVIDIA GPU with a CUDA 12.8-compatible driver.
+- Source builds require the CUDA 12.8 toolkit and GCC 12.
 
 ## Building from Source
 
-Prebuilt wheels are not yet published, so install from a checkout. The build compiles the CUDA extension locally and statically links the CUDA runtime; the GPU driver is only needed at run time.
-
-Install the CUDA 12.8 development toolkit and GCC 12 (or another compiler supported by that toolkit), then run the following from the repository root:
+Prebuilt wheels are not yet published. With CUDA 12.8 and GCC 12 installed, run from the repository root:
 
 ```bash
 export CUDA_HOME=/usr/local/cuda-12.8
 uv sync
 ```
 
-`CUDA_HOME` must contain `bin/nvcc`, the CUDA headers, and `libcudart_static.a`. If it is unset, the build looks for `nvcc` on `PATH` and in standard locations such as `/usr/local/cuda-12.8`.
-
-CUDA architectures are detected with `nvidia-smi`. To build without a GPU, or to target specific devices, set `CARL_CUDA_ARCHITECTURES` (for example, `89`).
+Set `CARL_CUDA_ARCHITECTURES` (for example, `89`) if `nvidia-smi` is unavailable.
 
 ## Torch Environment
 
