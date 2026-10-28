@@ -5,11 +5,12 @@ from typing import Any
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from carl import BOOST_PAD_POSITIONS, REGULATION_TICKS
-from ..events import BallTouchBatch
+from ..events import CarlEvents
 
 
 @dataclass(frozen=True)
 class RewardResult:
+
     reward: th.Tensor
     info:   Mapping[str, list[Any]] = field(default_factory=dict)
 
@@ -177,6 +178,7 @@ class CARLCars(_CARLTensor):
 
 
 class CARLObservation(_CARLTensor):
+
     """A tensor observation with named views into CARL's packed layout."""
 
     _n_cars: int
@@ -325,6 +327,7 @@ class CARLObservation(_CARLTensor):
 
 @dataclass(frozen=True)
 class CARLMatchReset:
+
     """Match state for the simulations selected by a reset provider."""
 
     blue_score:    th.Tensor
@@ -334,6 +337,7 @@ class CARLMatchReset:
 
 @dataclass(frozen=True)
 class CARLResetState:
+
     """Ball and cars use physics units unless ``normalized`` is true."""
 
     simulation_indices: th.Tensor
@@ -345,13 +349,17 @@ class CARLResetState:
 
     def validate(self, reset_mask: th.Tensor, n_cars: int) -> None:
         indices = self.simulation_indices
+
         if (indices.ndim != 1 or indices.dtype != th.int64
                 or indices.device != reset_mask.device):
             raise ValueError("simulation_indices must be int64 on the environment device")
+        
         if ((indices < 0) | (indices >= len(reset_mask))).any():
             raise ValueError("simulation_indices are out of range")
+        
         if not reset_mask[indices].all() or th.unique(indices).numel() != len(indices):
             raise ValueError("simulation_indices must be unique and selected for reset")
+        
         if (self.ball.shape != (len(indices), carl.OBS_BALL)
                 or self.cars.shape != (len(indices), n_cars, carl.OBS_PER_CAR)):
             raise ValueError("ball or cars have the wrong shape")
@@ -379,6 +387,7 @@ class CARLResetState:
 
 @dataclass(frozen=True)
 class CarlState:
+
     raw:                 th.Tensor
     n_cars:              int
     boost_pad_positions: th.Tensor
@@ -484,16 +493,8 @@ class CarlState:
 
 
 @dataclass(frozen=True)
-class CarlEvents:
-    score_delta:  th.Tensor
-    done:         th.Tensor
-    terminated:   th.Tensor
-    truncated:    th.Tensor
-    ball_touches: BallTouchBatch | None = None
+class StepContext:
 
-
-@dataclass(frozen=True)
-class RewardContext:
     current:              CarlState
     previous:             CarlState
     current_observation:  CARLObservation
@@ -516,5 +517,5 @@ __all__ = [
     "REGULATION_TICKS",
     "CarlEvents",
     "CarlState",
-    "RewardContext",
+    "StepContext",
 ]

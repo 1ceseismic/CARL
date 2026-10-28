@@ -110,6 +110,7 @@ def cuda_architectures():
 
 
 class CMakeBuild(build_ext):
+
     def run(self):
         toolkit_args = cuda_cmake_args()
         build_dir    = Path(self.build_temp)

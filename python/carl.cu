@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <type_traits>
 #include <pybind11/pybind11.h>
 
 #include "RLEnvironment.cuh"
@@ -46,6 +47,26 @@ static py::object tensorToCapsule(DLManagedTensor* tensor)
 {
     tensor->deleter = [](DLManagedTensor* self) { delete self; };
     return py::capsule(tensor, "dltensor", capsuleDeleter);
+}
+
+template<typename T>
+static py::object eventTensor(
+    const DeviceArray<T>& array,
+    int64_t* shape, int ndim)
+{
+    if (!array.ptr)
+    {
+        throw py::value_error("requested event capture is disabled");
+    }
+
+    if constexpr (std::is_same_v<T, float>)
+    {
+        return tensorToCapsule(makeFloatTensor(array.ptr, shape, ndim));
+    }
+    else
+    {
+        return tensorToCapsule(makeIntTensor(array.ptr, shape, ndim));
+    }
 }
 
 struct TensorView
@@ -247,17 +268,12 @@ class EnvWrapper
 
 public:
     EnvWrapper(
-        int nSim,
-        int nBlue,
-        int nOrange,
-        int seed,
-        int frameskip,
-        bool invertOrange,
-        bool normalize,
-        bool captureBallTouches)
+        int nSim, int nBlue, int nOrange, int seed, int frameskip,
+        bool invertOrange, bool normalize,
+        bool captureBallTouches, bool captureEvents)
         : env(nSim, nBlue, nOrange, seed)
         , io(nSim, env.getNCars(), env.getStream(), invertOrange, normalize,
-             frameskip, captureBallTouches)
+             frameskip, captureBallTouches, captureEvents)
         , frameskip(frameskip)
     {
         if (frameskip < 1)
@@ -278,12 +294,11 @@ public:
         py::capsule capsule = toCapsule(actions, env.getStream());
         const DLManagedTensor* actTensor = capsule.get_pointer<DLManagedTensor>();
         io.setActions(actionData(actTensor));
-        io.clearBallTouches();
-        const BallTouchBuffer touches = io.getBallTouchBuffer();
+        io.events.clear();
 
         for (int tick = 0; tick < frameskip; tick++)
         {
-            env.step(io.getActions(), touches);
+            env.step(io.getActions(), io.events.buffer());
         }
         
         io.packRewardsDones(env.getDeviceState());
@@ -291,7 +306,7 @@ public:
         io.packTransitionObs(env.getDeviceState());
         env.resetDones(
             io.getMaxTicks(), io.getOvertimeTimeoutTicks(),
-            io.getNoTouchTimeoutTicks());
+            io.getNoTouchTimeoutTicks(), io.events.buffer());
         io.packRawMatchState(env.getDeviceState());
         io.packObs(env.getDeviceState());
         io.packState(env.getDeviceState());
@@ -304,12 +319,11 @@ public:
         py::capsule capsule = toCapsule(actions, env.getStream());
         const DLManagedTensor* actTensor = capsule.get_pointer<DLManagedTensor>();
         io.setContinuousActions(continuousActionData(actTensor));
-        io.clearBallTouches();
-        const BallTouchBuffer touches = io.getBallTouchBuffer();
+        io.events.clear();
 
         for (int tick = 0; tick < frameskip; tick++)
         {
-            env.step(io.getContinuousActions(), touches);
+            env.step(io.getContinuousActions(), io.events.buffer());
         }
 
         io.packRewardsDones(env.getDeviceState());
@@ -317,7 +331,7 @@ public:
         io.packTransitionObs(env.getDeviceState());
         env.resetDones(
             io.getMaxTicks(), io.getOvertimeTimeoutTicks(),
-            io.getNoTouchTimeoutTicks());
+            io.getNoTouchTimeoutTicks(), io.events.buffer());
         io.packRawMatchState(env.getDeviceState());
         io.packObs(env.getDeviceState());
         io.packState(env.getDeviceState());
@@ -328,7 +342,7 @@ public:
     void reset()
     {
         env.reset();
-        io.clearBallTouches();
+        io.events.reset();
         io.packObs(env.getDeviceState());
         io.packState(env.getDeviceState());
         io.packTransitionState(env.getDeviceState(), 1);
@@ -338,9 +352,7 @@ public:
 
 
     void setBall(
-        py::object position,
-        py::object velocity,
-        py::object angularVelocity,
+        py::object position, py::object velocity, py::object angularVelocity,
         py::object simulationIndices)
     {
         int nSelected = env.getNSim();
@@ -375,14 +387,10 @@ public:
     }
 
     void setCar(
-        py::object position,
-        py::object rotation,
-        py::object velocity,
-        py::object angularVelocity,
-        py::object demoed,
-        py::object boost,
-        py::object internalState,
-        py::object simulationIndices)
+        py::object position, py::object rotation,
+        py::object velocity, py::object angularVelocity,
+        py::object demoed, py::object boost,
+        py::object internalState, py::object simulationIndices)
     {
         int nSelected = env.getNSim();
         std::optional<TensorView> selection;
@@ -545,6 +553,8 @@ public:
         return tensorToCapsule(io.getBallTouchValuesTensor());
     }
 
+    EventState& getEvents() { return io.events; }
+
     py::object getScoreDifference()
     {
         return tensorToCapsule(io.getScoreDifferenceTensor());
@@ -620,7 +630,7 @@ public:
         {
             throw py::value_error("frameskip must be at least 1");
         }
-        io.resizeBallTouches(ticks);
+        io.events.resize(ticks);
         frameskip = ticks;
     }
 };
@@ -692,6 +702,24 @@ PYBIND11_MODULE(_carl, m)
     m.attr("OBS_EGO_DODGE_TIME_INDEX") = OBS_EGO_DODGE_TIME_INDEX;
 
     m.attr("EVENT_BALL_TOUCH") = static_cast<int>(EVENT_BALL_TOUCH);
+    m.attr("EVENT_JUMP") = static_cast<int>(EVENT_JUMP);
+    m.attr("EVENT_DOUBLE_JUMP") = static_cast<int>(EVENT_DOUBLE_JUMP);
+    m.attr("EVENT_DODGE") = static_cast<int>(EVENT_DODGE);
+    m.attr("EVENT_GROUNDED") = static_cast<int>(EVENT_GROUNDED);
+    m.attr("EVENT_AIRBORNE") = static_cast<int>(EVENT_AIRBORNE);
+    m.attr("EVENT_ENTER_WALL") = static_cast<int>(EVENT_ENTER_WALL);
+    m.attr("EVENT_LEAVE_WALL") = static_cast<int>(EVENT_LEAVE_WALL);
+    m.attr("EVENT_FLIP_RESET") = static_cast<int>(EVENT_FLIP_RESET);
+    m.attr("EVENT_DEMOED") = static_cast<int>(EVENT_DEMOED);
+    m.attr("EVENT_GOAL") = static_cast<int>(EVENT_GOAL);
+    m.attr("EVENT_BALL_SURFACE_ENTER") = static_cast<int>(EVENT_BALL_SURFACE_ENTER);
+    m.attr("EVENT_BALL_SURFACE_LEAVE") = static_cast<int>(EVENT_BALL_SURFACE_LEAVE);
+    m.attr("EVENT_LEAVE_SURFACE") = static_cast<int>(EVENT_LEAVE_SURFACE);
+    m.attr("EVENT_BALL_ACCELERATES") = static_cast<int>(EVENT_BALL_ACCELERATES);
+    m.attr("ARENA_FLOOR") = static_cast<int>(ARENA_FLOOR);
+    m.attr("ARENA_SIDE_WALL") = static_cast<int>(ARENA_SIDE_WALL);
+    m.attr("ARENA_BACK_WALL") = static_cast<int>(ARENA_BACK_WALL);
+    m.attr("ARENA_CEILING") = static_cast<int>(ARENA_CEILING);
     m.attr("TOUCH_FRONT") = static_cast<int>(TOUCH_FRONT);
     m.attr("TOUCH_REAR") = static_cast<int>(TOUCH_REAR);
     m.attr("TOUCH_LEFT") = static_cast<int>(TOUCH_LEFT);
@@ -699,7 +727,6 @@ PYBIND11_MODULE(_carl, m)
     m.attr("TOUCH_ROOF") = static_cast<int>(TOUCH_ROOF);
     m.attr("TOUCH_UNDERSIDE") = static_cast<int>(TOUCH_UNDERSIDE);
     m.attr("TOUCH_TICK") = static_cast<int>(TOUCH_TICK);
-    m.attr("TOUCH_TYPE") = static_cast<int>(TOUCH_TYPE);
     m.attr("TOUCH_CAR") = static_cast<int>(TOUCH_CAR);
     m.attr("TOUCH_SURFACE") = static_cast<int>(TOUCH_SURFACE);
     m.attr("TOUCH_METADATA_SIZE") = static_cast<int>(TOUCH_METADATA_SIZE);
@@ -712,8 +739,6 @@ PYBIND11_MODULE(_carl, m)
     m.attr("TOUCH_DEPTH") = static_cast<int>(TOUCH_DEPTH);
     m.attr("TOUCH_REL_SPEED_BEFORE") = static_cast<int>(TOUCH_REL_SPEED_BEFORE);
     m.attr("TOUCH_REL_SPEED_AFTER") = static_cast<int>(TOUCH_REL_SPEED_AFTER);
-    m.attr("TOUCH_SPEED_CHANGE") = static_cast<int>(TOUCH_SPEED_CHANGE);
-    m.attr("TOUCH_ABS_SPEED_CHANGE") = static_cast<int>(TOUCH_ABS_SPEED_CHANGE);
     m.attr("TOUCH_SOLVER_DELTA_X") = static_cast<int>(TOUCH_SOLVER_DELTA_X);
     m.attr("TOUCH_SOLVER_DELTA_Y") = static_cast<int>(TOUCH_SOLVER_DELTA_Y);
     m.attr("TOUCH_SOLVER_DELTA_Z") = static_cast<int>(TOUCH_SOLVER_DELTA_Z);
@@ -732,6 +757,10 @@ PYBIND11_MODULE(_carl, m)
     m.attr("BALL_MAX_ANG_SPEED") = BALL_MAX_ANG_SPEED;
     m.attr("CAR_MAX_SPEED") = CAR_MAX_SPEED;
     m.attr("CAR_MAX_ANG_SPEED") = CAR_MAX_ANG_SPEED;
+    m.attr("CAR_REST_Z") = CAR_REST_Z;
+    m.attr("BALL_REST_Z") = BALL_REST_Z;
+    m.attr("CAR_INTERNAL_SIZE") = static_cast<int>(CAR_INTERNAL_SIZE);
+    m.attr("CAR_INT_ON_GROUND") = static_cast<int>(CAR_INT_ON_GROUND);
     m.attr("BOOST_MAX") = BOOST_MAX;
 
     py::tuple boostPadPositions(NUM_BOOST_PADS);
@@ -742,14 +771,50 @@ PYBIND11_MODULE(_carl, m)
     }
     m.attr("BOOST_PAD_POSITIONS") = boostPadPositions;
 
+    py::class_<EventState>(m, "EventState")
+        .def("acquire", &EventState::acquire, py::arg("stream"))
+        .def_property_readonly("enabled", &EventState::enabled)
+        .def_property_readonly("touches_enabled", &EventState::touchesEnabled)
+        .def("get_car_flags", [](EventState& e) {
+            return eventTensor(e.carFlags, e.carShape, 2);
+        })
+        .def("get_ball_flags", [](EventState& e) {
+            return eventTensor(e.ballFlags, e.ballShape, 1);
+        })
+        .def("get_ball_surface_entered", [](EventState& e) {
+            return eventTensor(e.ballSurfaceEntered, e.ballShape, 1);
+        })
+        .def("get_ball_surface_left", [](EventState& e) {
+            return eventTensor(e.ballSurfaceLeft, e.ballShape, 1);
+        })
+        .def("get_goal_side", [](EventState& e) {
+            return eventTensor(e.goalSide, e.ballShape, 1);
+        })
+        .def("get_ball_speed_change", [](EventState& e) {
+            return eventTensor(e.ballSpeedChange, e.ballShape, 1);
+        })
+        .def("get_ball_touch_counts", [](EventState& e) {
+            return eventTensor(e.touchCounts, e.countShape, 1);
+        })
+        .def("get_ball_touch_metadata", [](EventState& e) {
+            return eventTensor(e.touchMetadata, e.touchMetadataShape, 3);
+        })
+        .def("get_ball_touch_values", [](EventState& e) {
+            return eventTensor(e.touchValues, e.touchValuesShape, 3);
+        });
+
     py::class_<EnvWrapper>(m, "Env")
-        .def(py::init<int, int, int, int, int, bool, bool, bool>(),
+        .def(py::init<int, int, int, int, int, bool, bool, bool, bool>(),
              py::arg("n_sim"), py::arg("n_blue"),
              py::arg("n_orange"), py::arg("seed"),
              py::arg("frameskip") = 1,
              py::arg("invert_orange") = true,
              py::arg("normalize") = false,
-             py::arg("capture_ball_touches") = false)
+             py::arg("capture_ball_touches") = false,
+             py::arg("capture_events") = false)
+
+        .def_property_readonly("events", &EnvWrapper::getEvents,
+                              py::return_value_policy::reference_internal)
 
         .def("step",  &EnvWrapper::step, py::arg("actions"))
         .def("step_continuous", &EnvWrapper::stepContinuous, py::arg("actions"))

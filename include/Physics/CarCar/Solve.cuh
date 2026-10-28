@@ -3,6 +3,7 @@
 #include "Clip.cuh"
 #include "Response.cuh"
 #include "Solver.cuh"
+#include "State/Events.cuh"
 
 CARL_D CARL_FI void clearCarCarManifold(
     CarCarManifold& manifold,
@@ -56,12 +57,14 @@ CARL_D CARL_FI void solveCarCarPair(
     Workspace* __restrict__ space,
     int pairIdx,
     int carA,
-    int carB);
+    int carB,
+    EventBuffer events);
 
 CARL_D CARL_FI void solveCarCarForSim(
     GameState* __restrict__ state,
     Workspace* __restrict__ space,
-    int simIdx)
+    int simIdx,
+    EventBuffer events = {})
 {
     const int carBase = simIdx * state->nCars;
     int pairIdx = simIdx * space->ccMan.maxPairsPerSim;
@@ -70,7 +73,7 @@ CARL_D CARL_FI void solveCarCarForSim(
     {
         for (int b = a + 1; b < state->nCars; b++)
         {
-            solveCarCarPair(state, space, pairIdx, carBase + a, carBase + b);
+            solveCarCarPair(state, space, pairIdx, carBase + a, carBase + b, events);
             pairIdx++;
         }
     }
@@ -81,7 +84,8 @@ CARL_D CARL_FI void solveCarCarPair(
     Workspace* __restrict__ space,
     int pairIdx,
     int carA,
-    int carB)
+    int carB,
+    EventBuffer events)
 {
     CarCarManifold& manifold = space->ccMan;
     if (__ldg(&state->cars.isDemoed[carA])
@@ -140,6 +144,13 @@ CARL_D CARL_FI void solveCarCarPair(
     if (demo.valid())
     {
         applyDemo(state, demo);
+        events.car(demo.victim, EVENT_DEMOED);
+
+        if (events.enabled())
+        {
+            events.carSurfaces[demo.victim] = -1;
+        }
+
         clearCarCarManifold(manifold, pairIdx);
         return;
     }

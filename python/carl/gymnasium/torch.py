@@ -11,20 +11,21 @@ from gymnasium.vector import AutoresetMode, VectorEnv
 from gymnasium.vector.utils import batch_space
 
 import carl
-from ..events import BallTouchBatch, get_ball_touches as read_ball_touches
+
 from .action import CARLActionCodec
 from .state import (
     BOOST_PAD_POSITIONS,
     CARLObservation,
     CARLResetState,
     REGULATION_TICKS,
-    CarlEvents,
     CarlState,
-    RewardContext,
+    StepContext,
     RewardResult,
 )
 
-RewardFunction = Callable[[RewardContext], th.Tensor | RewardResult]
+from ..events import BallTouchBatch, CarlEvents
+
+RewardFunction = Callable[[StepContext], th.Tensor | RewardResult]
 ResetState = CARLResetState | Mapping[str, th.Tensor]
 ResetStateProvider = Callable[[th.Tensor], ResetState | None]
 
@@ -74,6 +75,7 @@ def _ticks(ticks: int | None, seconds: float | None, default: int | None) -> int
 
 
 class CARLTorchVectorEnv(VectorEnv):
+
     metadata = {"render_modes": [], "autoreset_mode": AutoresetMode.SAME_STEP}
     render_mode = spec = None
 
@@ -99,6 +101,7 @@ class CARLTorchVectorEnv(VectorEnv):
         reset_state_provider:     ResetStateProvider | None = None,
         discrete_actions:         bool = False,
         capture_ball_touches:     bool = False,
+        capture_events:           bool = False,
     ) -> None:
         super().__init__()
         
@@ -116,6 +119,8 @@ class CARLTorchVectorEnv(VectorEnv):
         self.reset_state_provider = reset_state_provider
         self.discrete_actions = discrete_actions
         self.capture_ball_touches = capture_ball_touches
+        self.capture_events = capture_events
+        self._events: CarlEvents | None = None
         self._state: CarlState | None = None
         self._observation: CARLObservation | None = None
 
@@ -128,6 +133,7 @@ class CARLTorchVectorEnv(VectorEnv):
             invert_orange=invert_orange,
             normalize=normalize,
             capture_ball_touches=capture_ball_touches,
+            capture_events=capture_events,
         )
         self._env.max_ticks = max_ticks
         self._env.overtime_timeout_ticks = _ticks(
@@ -197,6 +203,7 @@ class CARLTorchVectorEnv(VectorEnv):
 
     def _observe(self) -> CARLObservation:
         self._sync()
+        self._env.events.acquire(th.cuda.current_stream(self.device).cuda_stream)
         obs = self._tensor(self._env.get_obs()).view(self.n_envs, self._env.obs_dim)
         observation = CARLObservation.from_tensor(obs, self.n_cars)
         self._state = self._carl_state(self._env.get_state()) if self.reward_funcs else None
@@ -307,42 +314,37 @@ class CARLTorchVectorEnv(VectorEnv):
             raise RuntimeError("continuous controls do not use a categorical action mask")
         return self.action_codec.mask(observation)
 
-    def get_ball_touches(self) -> BallTouchBatch:
-        """Return a GPU snapshot of the most recent step's touch events."""
+    @property
+    def events(self) -> CarlEvents:
         self._check_open()
+        if self._events is None:
+            raise RuntimeError("reset or step must be called before reading events")
+        return self._events.wait()
+
+    def get_ball_touches(self) -> BallTouchBatch:
         if not self.capture_ball_touches:
             raise RuntimeError("ball-touch capture requires capture_ball_touches=True")
-        return read_ball_touches(self._env)
+        return self.events.ball_touches
 
     def _custom_reward(
-        self,
-        actions:     th.Tensor,
-        score_delta: th.Tensor,
-        done:        th.Tensor,
-        terminated:  th.Tensor,
-        truncated:   th.Tensor,
+        self, actions: th.Tensor,
     ) -> tuple[th.Tensor, dict[str, list[Any]]]:
         if self._state is None or self._observation is None:
             raise RuntimeError("reset must be called before using custom rewards")
 
         current_observation = CARLObservation.from_tensor(
-            self._tensor(self._env.get_obs()).view(
+            self._tensor(self._env.get_transition_obs()).view(
                 self.n_envs,
                 self._env.obs_dim,
             ),
             self.n_cars,
         )
-        context = RewardContext(
+        context = StepContext(
             current=self._carl_state(self._env.get_transition_state()),
             previous=self._state,
             current_observation=current_observation,
             previous_observation=self._observation,
-            events=CarlEvents(
-                score_delta=score_delta,
-                done=done,
-                terminated=terminated,
-                truncated=truncated,
-            ),
+            events=self.events,
             actions=actions,
             score_difference=self._score_difference,
             episode_ticks=self._episode_ticks,
@@ -378,6 +380,14 @@ class CARLTorchVectorEnv(VectorEnv):
         self._env.reset()
         self._apply_reset_state(th.ones(self.n_sim, dtype=th.bool, device=self.device))
         self._clear_sim_stats()
+        ended = th.zeros(self.n_sim, dtype=th.bool, device=self.device)
+        self._events = CarlEvents.from_native(
+            self._env.events,
+            score_delta = th.zeros(self.n_sim, device=self.device),
+            done        = ended,
+            terminated  = ended,
+            truncated   = ended,
+        )
         return self._observe()
 
     def set_ball(
@@ -431,6 +441,7 @@ class CARLTorchVectorEnv(VectorEnv):
                 if simulation_indices is not None else None
             ),
         )
+
         return self._observe()
 
     def step(
@@ -441,17 +452,22 @@ class CARLTorchVectorEnv(VectorEnv):
         dtype = th.int32 if self.discrete_actions else th.float32
         actions = th.as_tensor(actions, dtype=dtype, device=self.device).contiguous()
         action_dim = len(carl.ACTION_NVECS)
+
         if actions.shape != (self.n_envs, action_dim):
             raise ValueError(f"Expected actions shaped {(self.n_envs, action_dim)}")
+
         actions = actions.view(self.n_sim, self.n_cars, action_dim)
 
         self._sync()
+
         if self.discrete_actions:
             self._env.step(actions)
         else:
             self._env.step_continuous(actions)
+            
         self._sync()
 
+        self._env.events.acquire(th.cuda.current_stream(self.device).cuda_stream)
         score_delta = self._tensor(self._env.get_rewards())
         sim_done = self._tensor(self._env.get_dones())
         self._score_difference = self._tensor(self._env.get_transition_score_difference())
@@ -461,10 +477,16 @@ class CARLTorchVectorEnv(VectorEnv):
         sim_terminated = sim_done & score_delta.ne(0)
         sim_truncated = sim_done & ~sim_terminated
 
+        self._events = CarlEvents.from_native(
+            self._env.events,
+            score_delta = score_delta,
+            done        = sim_done,
+            terminated  = sim_terminated,
+            truncated   = sim_truncated,
+        )
+
         if self.reward_funcs:
-            reward, reward_info = self._custom_reward(
-                actions, score_delta, sim_done, sim_terminated, sim_truncated
-            )
+            reward, reward_info = self._custom_reward(actions)
         else:
             reward = (score_delta[:, None] * self._team_sign).reshape(self.n_envs)
             reward_info = {}
@@ -508,4 +530,5 @@ class CARLTorchVectorEnv(VectorEnv):
             return
         self._sync()
         del self._env
+        self._events = None
         self.closed = True

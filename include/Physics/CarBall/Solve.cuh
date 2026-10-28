@@ -232,7 +232,8 @@ CARL_D CARL_FI void solveBallCarPair(
     int ballIdx,
     int carIdx,
     const Vec3& preSolveBallVel,
-    BallTouchBuffer touches)
+    BallTouchBuffer touches,
+    EventBuffer events = {})
 {
     if (__ldg(&state->cars.isDemoed[carIdx])) return;
 
@@ -247,7 +248,7 @@ CARL_D CARL_FI void solveBallCarPair(
     if (!contact.hit) return;
 
     BallCarConstraint constraint = makeBallCarConstraint(car, ballVel, ballAng, contact);
-    const bool newTouch = touches.enabled()
+    const bool newTouch = (touches.enabled() || events.enabled())
         && __ldg(&state->cars.ballContactTick[carIdx]) < state->tickCount - 1;
     const float speedBefore = newTouch
         ? ballCarRelativeSpeed(ballVel, ballAng, car, constraint) : 0.f;
@@ -274,6 +275,9 @@ CARL_D CARL_FI void solveBallCarPair(
 
     if (newTouch)
     {
+        events.car(carIdx, EVENT_BALL_TOUCH);
+        events.ball(ballIdx, EVENT_BALL_TOUCH);
+
         const Vec3 localNormal = car.rot.toLocal(contact.normal);
         touches.record(ballIdx, {
             state->tickCount,
@@ -294,7 +298,8 @@ CARL_D __noinline__ void solveBallCarForSim(
     GameState* state,
     int simIdx,
     const Vec3& preSolveBallVel,
-    BallTouchBuffer touches = {})
+    BallTouchBuffer touches = {},
+    EventBuffer events = {})
 {
     const int ballIdx = simIdx;
     const int carBase = simIdx * state->nCars;
@@ -310,6 +315,6 @@ CARL_D __noinline__ void solveBallCarForSim(
         const Vec3 carCen = Vec3::ldg(state->cars.cen[carIdx]);
         if ((ballPos - carCen).lenSq() > maxDist * maxDist) continue;
 
-        solveBallCarPair(state, ballIdx, carIdx, preSolveBallVel, touches);
+        solveBallCarPair(state, ballIdx, carIdx, preSolveBallVel, touches, events);
     }
 }

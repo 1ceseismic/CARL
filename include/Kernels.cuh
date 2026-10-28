@@ -12,7 +12,8 @@ __global__ void resetDonesKernel(
     Workspace* __restrict__ space,
     int maxTicks,
     int overtimeTimeoutTicks,
-    int noTouchTimeoutTicks);
+    int noTouchTimeoutTicks,
+    EventBuffer events);
 
 __global__ void beginStepKernel(
     GameState* __restrict__ state,
@@ -21,12 +22,14 @@ __global__ void beginStepKernel(
 __global__ void carControlsKernel(
     GameState* __restrict__ state,
     Workspace* __restrict__ space,
-    const DiscreteControls* __restrict__ actions);
+    const DiscreteControls* __restrict__ actions,
+    EventBuffer events);
 
 __global__ void carContinuousControlsKernel(
     GameState* __restrict__ state,
     Workspace* __restrict__ space,
-    const ContinuousControls* __restrict__ actions);
+    const ContinuousControls* __restrict__ actions,
+    EventBuffer events);
 
 __global__ void carArenaBroadPhaseKernel(
     GameState* __restrict__ state,
@@ -56,10 +59,10 @@ __global__ void carCarBallSolveKernel(
     GameState* __restrict__ state,
     Workspace* __restrict__ space,
     ArenaMesh* __restrict__ arena,
-    BallTouchBuffer touches);
+    EventBuffer events);
 
 __global__ void integrateCarsKernel(GameState* __restrict__ state);
 
-__global__ void applyImpulseCacheKernel(GameState* __restrict__ state);
+__global__ void applyImpulseCacheKernel(GameState* __restrict__ state, EventBuffer events);
 
 __global__ void boostPadKernel(GameState* __restrict__ state);

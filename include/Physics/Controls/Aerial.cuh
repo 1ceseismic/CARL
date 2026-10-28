@@ -31,6 +31,8 @@ CARL_D CARL_FI void startJump(ControlCtx& ctx)
     s.isJumping = true;
     s.jumpTime = 0.f;
 
+    ctx.events.car(ctx.carIdx, EVENT_JUMP);
+
     addDeferredVel(ctx, ctx.up * JUMP_IMMEDIATE_FORCE);
 }
 
@@ -125,6 +127,8 @@ CARL_D CARL_FI void startFlip(ControlCtx& ctx, Vec3 dodge)
     s.hasFlipped = true;
     s.isFlipping = true;
 
+    ctx.events.car(ctx.carIdx, EVENT_DODGE);
+
     dodge = dodge * rsqrtf(dodge.lenSq());
     s.flipRelTorque = { -dodge.y, dodge.x, 0.f };
 
@@ -183,6 +187,8 @@ CARL_D CARL_FI void tryStartDodge(ControlCtx& ctx)
 
     addCarVel(ctx, ctx.up * JUMP_IMMEDIATE_FORCE);
     s.hasDoubleJumped = true;
+
+    ctx.events.car(ctx.carIdx, EVENT_DOUBLE_JUMP);
 }
 
 CARL_D CARL_FI void updateFlipMotion(ControlCtx& ctx)
@@ -215,6 +221,24 @@ CARL_D CARL_FI void updateDodge(ControlCtx& ctx)
 
     if (ctx.onGround)
     {
+        if (ctx.events.enabled() && !hasFlipOrJump(s))
+        {
+            int ballWheels = 0;
+
+            for (int wheel = 0; wheel < NUM_WHEELS; wheel++)
+            {
+                const int index = ctx.carIdx * NUM_WHEELS + wheel;
+                const int source = ctx.state->cars.wheelSource[index];
+
+                ballWheels += source == WHEEL_SOURCE_BALL;
+            }
+
+            if (ballWheels >= 3)
+            {
+                ctx.events.car(ctx.carIdx, EVENT_FLIP_RESET);
+            }
+        }
+
         resetDodgeState(s);
     }
     else

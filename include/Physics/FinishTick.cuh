@@ -1,6 +1,7 @@
 #pragma once
 
 #include "State/GameState.cuh"
+#include "State/Events.cuh"
 
 CARL_D CARL_FI void respawnCar(
     GameState* __restrict__ state,
@@ -68,7 +69,8 @@ CARL_D CARL_FI void updateRespawnSelection(
 
 CARL_D CARL_FI void finishBallTick(
     GameState* __restrict__ state,
-    int ballIdx)
+    int ballIdx,
+    EventBuffer events = {})
 {
     const Vec3 impulse = Vec3::ldg(state->ball.imp[ballIdx]);
     Vec3 vel = Vec3::ldg(state->ball.vel[ballIdx]) + impulse;
@@ -89,6 +91,25 @@ CARL_D CARL_FI void finishBallTick(
     state->ball.vel[ballIdx] = vel;
     state->ball.ang[ballIdx] = ang;
     state->ball.imp[ballIdx] = Vec3::zero();
+
+    if (events.enabled())
+    {
+        const GoalState& goal = state->goals[ballIdx];
+        const bool scored = goal.lastScorer != 0 && goal.tick == state->tickCount;
+
+        if (!scored)
+        {
+            const float change = vel.len() - events.ballSpeedBefore[ballIdx];
+            const float peak = events.ballSpeedChange[ballIdx];
+
+            events.ballSpeedChange[ballIdx] = fmaxf(peak, change);
+
+            if (change > 0.f)
+            {
+                events.ball(ballIdx, EVENT_BALL_ACCELERATES);
+            }
+        }
+    }
 }
 
 CARL_D CARL_FI void finishCarTick(

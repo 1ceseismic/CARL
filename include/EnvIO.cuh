@@ -2,6 +2,7 @@
 
 #include "Cuda/DLPack.h"
 #include "Cuda/KernelConfig.cuh"
+#include "EventState.cuh"
 #include "State/Events.cuh"
 #include "State/GameState.cuh"
 #include "State/Workspace.cuh"
@@ -44,9 +45,6 @@ private:
     int*   d_transitionEpisodeTicks = nullptr;
     bool*  d_overtime = nullptr;
     bool*  d_transitionOvertime = nullptr;
-    int*   d_ballTouchCounts = nullptr;
-    int*   d_ballTouchMetadata = nullptr;
-    float* d_ballTouchValues = nullptr;
 
     DiscreteControls* d_actions = nullptr;
     ContinuousControls* d_continuousActions = nullptr;
@@ -56,35 +54,29 @@ private:
     int64_t actShape[3];
     int64_t rewardShape[1];
     int64_t doneShape[1];
-    int64_t ballTouchMetadataShape[3] = {};
-    int64_t ballTouchValuesShape[3] = {};
 
     int  nSim;
     int  nCars;
     int  obsDim;
     int  stateDim;
     int  actDim;
-    int  ballTouchCapacity = 0;
     int  maxTicks = REGULATION_TICKS;
     int  overtimeTimeoutTicks = REGULATION_TICKS;
     int  noTouchTimeoutTicks = 0;
     bool invertOrange;
     bool normalize;
-    bool captureBallTouches = false;
 
     cudaStream_t stream;
     KernelConfig perSimConfig;
     KernelConfig perAgentConfig;
 
 public:
+    EventState events;
+
     EnvIO(
-        int nSim,
-        int nCars,
-        cudaStream_t stream,
-        bool invertOrange,
-        bool normalize,
-        int frameskip = 1,
-        bool captureBallTouches = false);
+        int nSim, int nCars, cudaStream_t stream,
+        bool invertOrange, bool normalize, int frameskip = 1,
+        bool captureBallTouches = false, bool captureEvents = false);
     ~EnvIO();
 
     // Pack state into observation buffer
@@ -117,14 +109,6 @@ public:
     DLManagedTensor* getBallTouchMetadataTensor();
     DLManagedTensor* getBallTouchValuesTensor();
 
-    void resizeBallTouches(int frameskip);
-    void clearBallTouches();
-    BallTouchBuffer getBallTouchBuffer() const
-    {
-        return { d_ballTouchCounts, d_ballTouchMetadata,
-                 d_ballTouchValues, ballTouchCapacity };
-    }
-
     // Copy external actions into internal buffer
     void setActions(const int32_t* src);
     void setContinuousActions(const float* src);
@@ -137,26 +121,15 @@ public:
 
     // Set state from contiguous device buffers
     void setBall(
-        GameState* d_state,
-        const float* pos,
-        const float* vel,
-        const float* ang,
-        const int64_t* simulationIndices = nullptr,
-        int nSelected = -1);
+        GameState* d_state, const float* pos, const float* vel, const float* ang,
+        const int64_t* simulationIndices = nullptr, int nSelected = -1);
 
     void setCar(
-        GameState* d_state,
-        Workspace* d_space,
-        const float* pos,
-        const float* rot,
-        const float* vel,
-        const float* ang,
-        const void* demoed,
-        bool byteDemoed,
-        const float* boost = nullptr,
-        const float* internalState = nullptr,
-        const int64_t* simulationIndices = nullptr,
-        int nSelected = -1);
+        GameState* d_state, Workspace* d_space,
+        const float* pos, const float* rot, const float* vel, const float* ang,
+        const void* demoed, bool byteDemoed,
+        const float* boost = nullptr, const float* internalState = nullptr,
+        const int64_t* simulationIndices = nullptr, int nSelected = -1);
     void setMatchState(GameState* d_state, const int32_t* blueScore,
         const int32_t* orangeScore, const int32_t* episodeTicks,
         const int64_t* simulationIndices = nullptr, int nSelected = -1);

@@ -31,13 +31,13 @@ private:
 
     void beginStep();
     void stepBroadSusp();
-    void stepControls(const DiscreteControls* actions);
-    void stepControls(const ContinuousControls* actions);
+    void stepControls(const DiscreteControls* actions, EventBuffer events);
+    void stepControls(const ContinuousControls* actions, EventBuffer events);
     void stepNarrow();
     void stepCarManifoldSolve();
-    void stepCarCarSolve(BallTouchBuffer touches);
+    void stepCarCarSolve(EventBuffer events);
     void integrateCars();
-    void applyImpulseCache();
+    void applyImpulseCache(EventBuffer events);
     void stepBoostPad();
 
 public:
@@ -46,12 +46,13 @@ public:
         const int nOrange, const int seed);
     ~RLEnvironment();
 
-    void step(const DiscreteControls* actions, BallTouchBuffer touches = {});
-    void step(const ContinuousControls* actions, BallTouchBuffer touches = {});
+    void step(const DiscreteControls* actions, EventBuffer events = {});
+    void step(const ContinuousControls* actions, EventBuffer events = {});
 
     void reset();
     void resetDones(
-        int maxTicks, int overtimeTimeoutTicks, int noTouchTimeoutTicks);
+        int maxTicks, int overtimeTimeoutTicks, int noTouchTimeoutTicks,
+        EventBuffer events = {});
 
     GameState* getDeviceState() { return d_state; }
     Workspace* getDeviceWorkspace() { return d_space; }

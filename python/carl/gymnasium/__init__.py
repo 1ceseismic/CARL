@@ -9,7 +9,7 @@ from .state import (
     CarlEvents,
     CarlState,
     REGULATION_TICKS,
-    RewardContext,
+    StepContext,
     RewardResult,
 )
 from .torch import CARLTorchVectorEnv, ResetStateProvider, RewardFunction
@@ -27,7 +27,7 @@ __all__ = [
     "CarlEvents",
     "CarlState",
     "REGULATION_TICKS",
-    "RewardContext",
+    "StepContext",
     "RewardFunction",
     "RewardResult",
     "ResetStateProvider",

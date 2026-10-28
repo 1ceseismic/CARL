@@ -2,11 +2,13 @@
 
 #include "State/GameState.cuh"
 #include "RLConstants.cuh"
+#include "State/Events.cuh"
 
 CARL_D CARL_FI void detectGoal(
     GameState* __restrict__ state,
     int simIdx,
-    const Vec3& ballPos)
+    const Vec3& ballPos,
+    EventBuffer events = {})
 {
     GoalState& goal = state->goals[simIdx];
 
@@ -16,6 +18,13 @@ CARL_D CARL_FI void detectGoal(
                      : ballPos.y < -threshold ? -1 : 0;
 
     if (!scorer) return;
+
+    if (events.enabled())
+    {
+        events.ball(simIdx, EVENT_GOAL);
+        events.goalSide[simIdx] = scorer;
+        events.ballSurfaces[simIdx] = -1;
+    }
     
     if (scorer > 0)
     {

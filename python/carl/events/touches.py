@@ -1,31 +1,25 @@
 import torch as th
 
-from dataclasses import dataclass
-from enum import IntEnum
-
-from . import _carl
+from dataclasses import dataclass, field
+from .. import _carl
 
 
-class Event(IntEnum):
-    BALL_TOUCH = _carl.EVENT_BALL_TOUCH
-
-
-class ContactSurface(IntEnum):
-    FRONT = _carl.TOUCH_FRONT
-    REAR = _carl.TOUCH_REAR
-    LEFT = _carl.TOUCH_LEFT
-    RIGHT = _carl.TOUCH_RIGHT
-    ROOF = _carl.TOUCH_ROOF
-    UNDERSIDE = _carl.TOUCH_UNDERSIDE
-
-
-@dataclass(frozen=True)
+@dataclass
 class BallTouchBatch:
-    """GPU arrays [simulation, touch]; use ``valid`` to exclude empty slots."""
 
-    counts: th.Tensor
+    counts:   th.Tensor
     metadata: th.Tensor
-    values: th.Tensor
+    values:   th.Tensor
+    _native:  _carl.EventState | None = field(default=None, repr=False, compare=False)
+
+    def wait(self):
+        if self._native is not None:
+            self._native.acquire(th.cuda.current_stream().cuda_stream)
+        return self
+
+    def snapshot(self):
+        self.wait()
+        return BallTouchBatch(self.counts.clone(), self.metadata.clone(), self.values.clone())
 
     @property
     def valid(self) -> th.Tensor:
@@ -70,11 +64,11 @@ class BallTouchBatch:
 
     @property
     def speed_change(self) -> th.Tensor:
-        return self.values[..., _carl.TOUCH_SPEED_CHANGE]
+        return self.relative_speed_after - self.relative_speed_before
 
     @property
     def absolute_speed_change(self) -> th.Tensor:
-        return self.values[..., _carl.TOUCH_ABS_SPEED_CHANGE]
+        return self.speed_change.abs()
 
     @property
     def solver_ball_velocity_change(self) -> th.Tensor:
@@ -86,20 +80,4 @@ class BallTouchBatch:
 
     @property
     def ball_velocity_change(self) -> th.Tensor:
-        """Solver change plus requested extra impulse, before any speed cap."""
         return self.solver_ball_velocity_change + self.extra_ball_velocity_change
-
-
-def get_ball_touches(env: _carl.Env) -> BallTouchBatch:
-    """Copy the most recent step's event batch from a capture-enabled environment."""
-    counts = th.from_dlpack(env.get_ball_touch_counts())
-    metadata = th.from_dlpack(env.get_ball_touch_metadata())
-    values = th.from_dlpack(env.get_ball_touch_values())
-
-    th.cuda.synchronize(counts.device)
-    batch = BallTouchBatch(counts.clone(), metadata.clone(), values.clone())
-    th.cuda.current_stream(counts.device).synchronize()
-    return batch
-
-
-__all__ = ["Event", "ContactSurface", "BallTouchBatch", "get_ball_touches"]
