@@ -67,14 +67,41 @@ __global__ void checkPhysics(GameState* state, Workspace* space, int* result)
     updateSteer(ctx);
     check(space->susp.steerAnglePrev[0] == .25f);
     check(space->susp.steerAngle[0] == 0.f);
+    state->tickCount = 77;
+    for (int sim = 0; sim < 2; ++sim)
+    {
+        state->goals[sim] = {};
+        state->episodeTicks[sim] = 10;
+        state->lastBallTouchTicks[sim] = 77;
+        state->ballArenaContactTick[sim] = 77;
+    }
+    for (int car = 0; car < 4; ++car)
+    {
+        state->cars.arenaContactTick[car] = 77;
+        for (int wheel = 0; wheel < NUM_WHEELS; ++wheel)
+            state->cars.wheelSource[car * NUM_WHEELS + wheel] = WHEEL_SOURCE_BALL;
+    }
+    state->goals[0].lastScorer = 1;
+    resetAfterDone(state, space, 0, 1200, 1200, 0);
+    check(state->goals[0].lastScorer == 0 && state->episodeTicks[0] == 0);
+    check(state->episodeTicks[1] == 10);
+    check(state->ballArenaContactTick[0] == -1);
+    check(state->ballArenaContactTick[1] == 77);
+    for (int car = 0; car < 4; ++car)
+    {
+        check(state->cars.arenaContactTick[car] == (car < 2 ? -1 : 77));
+        for (int wheel = 0; wheel < NUM_WHEELS; ++wheel)
+            check(state->cars.wheelSource[car * NUM_WHEELS + wheel] ==
+                  (car < 2 ? WHEEL_SOURCE_NONE : WHEEL_SOURCE_BALL));
+    }
     result[0] = cases;
     result[1] = failures;
 }
 
 int main()
 {
-    GameState state(1, 1, 1, 42);
-    Workspace space(1, 2, 2);
+    GameState state(2, 1, 1, 42);
+    Workspace space(2, 2, 4);
     GameState* deviceState;
     Workspace* deviceSpace;
     int* result;

@@ -112,11 +112,13 @@ CARL_D CARL_FI void resetAfterDone(
     resetToKickoff(state, simIdx);
     state->episodeTicks[simIdx] = 0;
     state->lastBallTouchTicks[simIdx] = state->tickCount;
+    state->ballArenaContactTick[simIdx] = -1;
 
     const int carBase = simIdx * state->nCars;
     for (int local = 0; local < state->nCars; local++)
     {
         const int carIdx = carBase + local;
+        state->cars.arenaContactTick[carIdx] = -1;
         space->bp.numTris[carIdx] = 0;
         space->ctHit.carHitCount[carIdx] = 0;
         space->ctMan.count[carIdx] = 0;
@@ -141,6 +143,7 @@ CARL_D CARL_FI void resetAfterDone(
         for (int wheel = 0; wheel < NUM_WHEELS; wheel++)
         {
             const int wheelIdx = carIdx * NUM_WHEELS + wheel;
+            state->cars.wheelSource[wheelIdx] = WHEEL_SOURCE_NONE;
             space->susp.rayDist[wheelIdx] = 0.f;
             space->susp.rayNormal[wheelIdx] = Vec3::zero();
             space->susp.latFrictionPrev[wheelIdx] = 0.f;
